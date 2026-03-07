@@ -13,20 +13,21 @@ import os
 
 class HeatTreatmentMachine(DryingFurnace, HardeningFurnace, Quenching, RustPrevention, SaltBath, TemperingFurnace,
                            Washing, ConveyorBelt, Feeder):
-    def __init__(self, preprocess_dataset_flag=False):
-        DryingFurnace.__init__(self)
-        HardeningFurnace.__init__(self)
-        Quenching.__init__(self)
-        RustPrevention.__init__(self)
-        SaltBath.__init__(self)
-        TemperingFurnace.__init__(self)
-        Washing.__init__(self)
-        ConveyorBelt.__init__(self)
-        Feeder.__init__(self)
-
+    def __init__(self, preprocess_dataset_flag=False, train_pinn_flag=False):
         raw_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Raw/품질전처리후데이터.csv"
         quality_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Raw/열처리_품질데이터.xlsx"
         processed_dir_path = "Factory/PINN/Dataset/Heat_Treatment/Processed/"
+        pinn_model_path = "Factory/Machine/Heat_Treatment/PINN/"
+
+        DryingFurnace.__init__(self, train_pinn_flag, pinn_model_path)
+        HardeningFurnace.__init__(self, train_pinn_flag, pinn_model_path)
+        Quenching.__init__(self)
+        RustPrevention.__init__(self)
+        SaltBath.__init__(self, train_pinn_flag, pinn_model_path)
+        TemperingFurnace.__init__(self)
+        Washing.__init__(self, train_pinn_flag, pinn_model_path)
+        ConveyorBelt.__init__(self)
+        Feeder.__init__(self)
 
         if preprocess_dataset_flag:
             self.__preprocess_heat_treatment_dataset(raw_dataset_path, quality_dataset_path, processed_dir_path)

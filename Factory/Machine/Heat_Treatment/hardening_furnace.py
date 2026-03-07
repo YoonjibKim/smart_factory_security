@@ -1,36 +1,43 @@
+import os
 import torch
 from Factory.PINN.pinn import PINN
 
+
 class HardeningFurnace(PINN):
-    def __init__(self):
+    def __init__(self, train_pinn_flag, pinn_model_path):
         PINN.__init__(self)
+
+        # 🚨 파라미터로 받은 변수를 클래스 내부에서 사용할 수 있도록 저장
+        self.train_pinn_flag = train_pinn_flag
+        self.pinn_model_path = pinn_model_path
+
         # 소입로 열확산 계수 (건조로와 동일하게 임의 설정, 실제 공정에 맞게 튜닝 필요)
         self.alpha = 0.01
 
         # 1. 전체 데이터 추출용 리스트 (소입로는 1~4존까지 존재)
         self.__target_columns = [
-            'TAG_MIN',             # 시간 변수 (t를 만들기 위한 원본 데이터)
-            '소입1존 OP',          # 1존 제어/출력값 (입력 특성)
-            '소입2존 OP',          # 2존 제어/출력값 (입력 특성)
-            '소입3존 OP',          # 3존 제어/출력값 (입력 특성)
-            '소입4존 OP',          # 4존 제어/출력값 (입력 특성)
+            'TAG_MIN',  # 시간 변수 (t를 만들기 위한 원본 데이터)
+            '소입1존 OP',  # 1존 제어/출력값 (입력 특성)
+            '소입2존 OP',  # 2존 제어/출력값 (입력 특성)
+            '소입3존 OP',  # 3존 제어/출력값 (입력 특성)
+            '소입4존 OP',  # 4존 제어/출력값 (입력 특성)
             '소입로 온도 1 Zone',  # 1존 온도 (예측 타겟 u)
             '소입로 온도 2 Zone',  # 2존 온도 (예측 타겟 u)
             '소입로 온도 3 Zone',  # 3존 온도 (예측 타겟 u)
-            '소입로 온도 4 Zone'   # 4존 온도 (예측 타겟 u)
+            '소입로 온도 4 Zone'  # 4존 온도 (예측 타겟 u)
         ]
 
         # 2. PINN 공간 맵핑을 위한 역할 분담 리스트
         self.__temp_cols = [
-            '소입로 온도 1 Zone', 
-            '소입로 온도 2 Zone', 
-            '소입로 온도 3 Zone', 
+            '소입로 온도 1 Zone',
+            '소입로 온도 2 Zone',
+            '소입로 온도 3 Zone',
             '소입로 온도 4 Zone'
         ]
         self.__op_cols = [
-            '소입1존 OP', 
-            '소입2존 OP', 
-            '소입3존 OP', 
+            '소입1존 OP',
+            '소입2존 OP',
+            '소입3존 OP',
             '소입4존 OP'
         ]
 
@@ -62,17 +69,46 @@ class HardeningFurnace(PINN):
         # 2. 모델 초기화
         self._make_model()
 
-        # 3. 모델 학습 (파라미터로 소입로 1~4존 온도와 OP 리스트를 분리해서 넘김)
-        self._train_pinn(
-            train_df=filtered_train_df,
-            target_cols=self.__temp_cols,
-            op_cols=self.__op_cols,
-            epochs=10000,
-            sample_ratio=0.5
-        )
+        # 🚨 경로 자동 정리: 넘어온 경로가 폴더일 경우 파일명 강제 지정
+        if self.pinn_model_path.endswith('/') or self.pinn_model_path.endswith('\\') or os.path.isdir(
+                self.pinn_model_path):
+            actual_model_path = os.path.join(self.pinn_model_path, "hardening_furnace_pinn.pth")
+        else:
+            actual_model_path = self.pinn_model_path
 
-        # 4. 모델 테스트 (평가)
-        self._test_pinn(filtered_test_df, self.__temp_cols, self.__op_cols)
+        # 🚨 train_pinn_flag에 따른 조건부 학습 및 저장/로드 로직
+        if self.train_pinn_flag:
+            print(f"[*] 학습 모드 작동: 소입로 모델 학습을 시작합니다.")
+
+            # 3. 모델 학습
+            self._train_pinn(
+                train_df=filtered_train_df,
+                target_cols=self.__temp_cols,
+                op_cols=self.__op_cols,
+                epochs=10000,
+                sample_ratio=0.5
+            )
+
+            # 4. 모델 테스트 (평가)
+            self._test_pinn(filtered_test_df, self.__temp_cols, self.__op_cols)
+
+            # 5. 모델 저장 로직
+            save_dir = os.path.dirname(actual_model_path)
+            if save_dir:  # 경로에 폴더가 포함되어 있다면 폴더 생성
+                os.makedirs(save_dir, exist_ok=True)
+
+            torch.save(self.model.state_dict(), actual_model_path)
+            print(f"[*] 학습 완료: 모델이 성공적으로 저장되었습니다 -> {actual_model_path}")
+
+        else:
+            # 학습을 하지 않을 경우 저장된 모델 불러오기
+            print(f"[*] 추론 모드 작동: 저장된 소입로 모델을 불러옵니다.")
+            if os.path.exists(actual_model_path):
+                self.model.load_state_dict(torch.load(actual_model_path))
+                self.model.eval()  # 평가 모드로 전환
+                print(f"[*] 모델 로드 성공 -> {actual_model_path}")
+            else:
+                print(f"[!] 에러: 지정된 경로에서 모델을 찾을 수 없습니다 -> {actual_model_path}")
 
     def _compute_physics_loss(self, t, x, op):
         """

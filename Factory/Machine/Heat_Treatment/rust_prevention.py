@@ -2,8 +2,9 @@ class RustPrevention:
     def __init__(self):
         pass
 
-    def _operate_rust_prevention(self): # noqa
+    def operate_rust_prevention(self, materials=None): # noqa
         print("방청기 동작")
+        return materials
     
-    def _build_rust_prevention(self): # noqa
+    def build_rust_prevention(self): # noqa
         print("방청기 설치")

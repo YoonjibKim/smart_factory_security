@@ -11,23 +11,22 @@ import pandas as pd
 import os
 
 
-class HeatTreatmentMachine(DryingFurnace, HardeningFurnace, Quenching, RustPrevention, SaltBath, TemperingFurnace,
-                           Washing, ConveyorBelt, Feeder):
+class HeatTreatmentMachine:
     def __init__(self, preprocess_dataset_flag=False, train_pinn_flag=False):
         raw_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Raw/품질전처리후데이터.csv"
         quality_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Raw/열처리_품질데이터.xlsx"
         processed_dir_path = "Factory/PINN/Dataset/Heat_Treatment/Processed/"
         pinn_model_path = "Factory/Machine/Heat_Treatment/PINN/"
 
-        DryingFurnace.__init__(self, train_pinn_flag, pinn_model_path)
-        HardeningFurnace.__init__(self, train_pinn_flag, pinn_model_path)
-        Quenching.__init__(self)
-        RustPrevention.__init__(self)
-        SaltBath.__init__(self, train_pinn_flag, pinn_model_path)
-        TemperingFurnace.__init__(self)
-        Washing.__init__(self, train_pinn_flag, pinn_model_path)
-        ConveyorBelt.__init__(self)
-        Feeder.__init__(self)
+        self.__drying_furnace = DryingFurnace(train_pinn_flag, pinn_model_path)
+        self.__hardening_furnace = HardeningFurnace(train_pinn_flag, pinn_model_path)
+        self.__quenching = Quenching()
+        self.__rust_prevention = RustPrevention()
+        self.__salt_bath = SaltBath(train_pinn_flag, pinn_model_path)
+        self.__tempering_furnace = TemperingFurnace()
+        self.__washing = Washing(train_pinn_flag, pinn_model_path)
+        self.__conveyor_belt = ConveyorBelt()
+        self.__feeder = Feeder()
 
         if preprocess_dataset_flag:
             self.__preprocess_heat_treatment_dataset(raw_dataset_path, quality_dataset_path, processed_dir_path)
@@ -74,56 +73,56 @@ class HeatTreatmentMachine(DryingFurnace, HardeningFurnace, Quenching, RustPreve
         print(f"Train 데이터 크기: {train_df.shape}, Test 데이터 크기: {test_df.shape}")
         print(f"파일 저장 완료: {os.path.abspath(merged_dir_path)} 폴더를 확인하세요.")
 
-    def operate_drying_furnace(self):
-        self._operate_drying_furnace()
+    def operate_drying_furnace(self, materials=None):
+        return self.__drying_furnace.operate_drying_furnace(materials)
 
     def build_drying_furnace(self):
-        self._build_drying_furnace(self.__train_dataset_path, self.__test_dataset_path)
+        self.__drying_furnace.build_drying_furnace(self.__train_dataset_path, self.__test_dataset_path)
 
-    def operate_hardening_furnace(self):
-        self._operate_hardening_furnace()
+    def operate_hardening_furnace(self, materials=None):
+        return self.__hardening_furnace.operate_hardening_furnace(materials)
 
     def build_hardening_furnace(self):
-        self._build_hardening_furnace(self.__train_dataset_path, self.__test_dataset_path)
+        self.__hardening_furnace.build_hardening_furnace(self.__train_dataset_path, self.__test_dataset_path)
 
-    def operate_quenching(self):
-        self._operate_quenching()
+    def operate_quenching(self, materials=None):
+        return self.__quenching.operate_quenching(materials)
 
     def build_quenching(self):
-        self._build_quenching()
+        self.__quenching.build_quenching()
 
-    def operate_rust_prevention(self):
-        self._operate_rust_prevention()
+    def operate_rust_prevention(self, materials=None):
+        return self.__rust_prevention.operate_rust_prevention(materials)
 
     def build_rust_prevention(self):
-        self._build_rust_prevention()
+        self.__rust_prevention.build_rust_prevention()
 
-    def operate_salt_bath(self):
-        self._operate_salt_bath()
+    def operate_salt_bath(self, materials=None):
+        return self.__salt_bath.operate_salt_bath(materials)
 
     def build_salt_bath(self):
-        self._build_salt_bath(self.__train_dataset_path, self.__test_dataset_path)
+        self.__salt_bath.build_salt_bath(self.__train_dataset_path, self.__test_dataset_path)
 
-    def operate_tempering_furnace(self):
-        self._operate_tempering_furnace()
+    def operate_tempering_furnace(self, materials=None):
+        return self.__tempering_furnace.operate_tempering_furnace(materials)
 
     def build_tempering_furnace(self):
-        self._build_tempering_furnace()
+        self.__tempering_furnace.build_tempering_furnace()
 
-    def operate_washing(self):
-        self._operate_washing()
+    def operate_washing(self, materials=None):
+        return self.__washing.operate_washing(materials)
 
     def build_washing(self):
-        self._build_washing(self.__train_dataset_path, self.__test_dataset_path)
+        self.__washing.build_washing(self.__train_dataset_path, self.__test_dataset_path)
 
-    def operate_conveyor_belt(self, parts=None):
-        self._operate_conveyor_belt()
+    def operate_conveyor_belt(self, materials=None):
+        return self.__conveyor_belt.operate_conveyor_belt(materials)
 
     def build_conveyor_belt(self):
-        self._build_conveyor_belt()
+        self.__conveyor_belt.build_conveyor_belt()
 
-    def operate_feeder(self):
-        self._operate_feeder()
+    def operate_feeder(self, materials=None):
+        return self.__feeder.operate_feeder(materials)
 
     def build_feeder(self):
-        self._build_feeder()
+        self.__feeder.build_feeder()

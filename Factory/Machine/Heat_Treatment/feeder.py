@@ -2,8 +2,9 @@ class Feeder:
     def __init__(self):
         pass
     
-    def _operate_feeder(self): # noqa
+    def operate_feeder(self, materials=None): # noqa
         print("공급기 동작")
+        return materials
 
-    def _build_feeder(self): # noqa
+    def build_feeder(self): # noqa
         print("공급기 설치")

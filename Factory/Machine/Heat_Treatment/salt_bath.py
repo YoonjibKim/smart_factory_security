@@ -13,20 +13,20 @@ class SaltBath(PINN):
 
         self.salt_bath_alpha = 0.01
 
-        self._salt_bath_target_columns = [
+        self.__target_columns = [
             'TAG_MIN',
             '솔트조 온도 1 Zone',
             '솔트조 온도 2 Zone'
         ]
 
-        self._salt_bath_temp_cols = [
+        self.__temp_cols = [
             '솔트조 온도 1 Zone',
             '솔트조 온도 2 Zone'
         ]
 
         # 🚨 [수정됨] PINN.py 에러 방지를 위해 가짜(Dummy) OP 컬럼 이름 지정
         # (온도 Zone 개수에 맞춰 2개를 만들어 줍니다)
-        self._salt_bath_op_cols = ['솔트_Dummy_OP_1', '솔트_Dummy_OP_2']
+        self.__op_cols = ['솔트_Dummy_OP_1', '솔트_Dummy_OP_2']
 
     def operate_salt_bath(self, materials=None):  # noqa
         print("솔트조 동작 및 추론(테스트) 수행")
@@ -49,7 +49,9 @@ class SaltBath(PINN):
         # 테스트 수행
         if test_df is not None:
             print("[*] 원자재(Test 데이터)를 활용하여 모델 평가를 진행합니다.")
-            self._test_pinn(test_df, self._salt_bath_temp_cols, self._salt_bath_op_cols)
+            self._test_pinn(test_df, self.__temp_cols, self.__op_cols)
+            self._simulate_what_if_op(test_df, self.__temp_cols, self.__op_cols, self.__op_cols[0])
+            self._detect_anomalies(test_df, self.__temp_cols, self.__op_cols)
         else:
             print("[!] 경고: 입력된 원자재 데이터(raw_materials)가 없어 테스트를 건너뜁니다.")
 
@@ -65,14 +67,14 @@ class SaltBath(PINN):
 
         try:
             if train_df is not None:
-                train_filtered = train_df[self._salt_bath_target_columns].copy()
+                train_filtered = train_df[self.__target_columns].copy()
                 # 🚨 PINN.py를 속이기 위해 값이 0인 가짜 OP 컬럼을 추가
                 train_filtered['솔트_Dummy_OP_1'] = 0.0
                 train_filtered['솔트_Dummy_OP_2'] = 0.0
                 print(f"[*] 솔트조 Train 데이터 필터링 완료: {train_filtered.columns.tolist()}")
 
             if test_df is not None:
-                test_filtered = test_df[self._salt_bath_target_columns].copy()
+                test_filtered = test_df[self.__target_columns].copy()
                 test_filtered['솔트_Dummy_OP_1'] = 0.0
                 test_filtered['솔트_Dummy_OP_2'] = 0.0
                 print(f"[*] 솔트조 Test 데이터 필터링 완료: {test_filtered.columns.tolist()}")
@@ -104,8 +106,8 @@ class SaltBath(PINN):
 
             self._train_pinn(
                 train_df=filtered_train_df,
-                target_cols=self._salt_bath_temp_cols,
-                op_cols=self._salt_bath_op_cols,  # 이제 빈 리스트가 아니라 가짜 OP 2개가 들어갑니다.
+                target_cols=self.__temp_cols,
+                op_cols=self.__op_cols,  # 이제 빈 리스트가 아니라 가짜 OP 2개가 들어갑니다.
                 epochs=10000,  # 🚨 다른 장비와 동일하게 10000으로 수정
                 sample_ratio=0.5
             )

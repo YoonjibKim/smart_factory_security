@@ -1,5 +1,5 @@
 from Factory.Machine.Heat_Treatment.heat_treatment_machine import HeatTreatmentMachine
-from Factory.Matrials.Heat_Treatment.heat_treatment_materials import HeatTreatmentMaterials
+from Factory.Materials.Heat_Treatment.heat_treatment_materials import HeatTreatmentMaterials
 
 
 class HeatTreatmentFactory:
@@ -58,5 +58,5 @@ class HeatTreatmentFactory:
 
         # 8. 부품 가공 완료 및 배출
         processed_part = self.__materials.unload_hardened_part(rust_prevention_furnace_materials)
-
+        print(processed_part)
         print("================ 열처리 공정 종료 ================\n")

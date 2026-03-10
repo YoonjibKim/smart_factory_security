@@ -12,19 +12,19 @@ class Washing(PINN):
 
         self.washing_alpha = 0.01
 
-        self._washing_target_columns = [
+        self.__target_columns = [
             'TAG_MIN',
             '세정기'
         ]
 
         # 🚨 [수정됨] 업그레이드된 PINN.py는 동적 할당을 지원하므로
         # 더 이상 가짜 타겟(Dummy Zone 2)을 억지로 만들 필요가 없습니다!
-        self._washing_temp_cols = [
+        self.__temp_cols = [
             '세정기'
         ]
 
         # OP 데이터가 없는 설비이므로 타겟 개수(1개)에 맞춰 가짜 OP를 1개만 유지합니다.
-        self._washing_op_cols = ['세정_Dummy_OP_1']
+        self.__op_cols = ['세정_Dummy_OP_1']
 
     def operate_washing(self, materials=None):  # noqa
         print("세정기 동작 및 추론(테스트) 수행")
@@ -47,7 +47,9 @@ class Washing(PINN):
         # 테스트 수행
         if test_df is not None:
             print("[*] 원자재(Test 데이터)를 활용하여 모델 평가를 진행합니다.")
-            self._test_pinn(test_df, self._washing_temp_cols, self._washing_op_cols)
+            self._test_pinn(test_df, self.__temp_cols, self.__op_cols)
+            self._simulate_what_if_op(test_df, self.__temp_cols, self.__op_cols, self.__op_cols[0])
+            self._detect_anomalies(test_df, self.__temp_cols, self.__op_cols)
         else:
             print("[!] 경고: 입력된 원자재 데이터(raw_materials)가 없어 테스트를 건너뜁니다.")
 
@@ -63,13 +65,13 @@ class Washing(PINN):
 
         try:
             if train_df is not None:
-                train_filtered = train_df[self._washing_target_columns].copy()
+                train_filtered = train_df[self.__target_columns].copy()
                 # PINN.py 차원 맞춤용 가짜 OP 1개 추가
                 train_filtered['세정_Dummy_OP_1'] = 0.0
                 print(f"[*] 세정기 Train 데이터 필터링 완료: {train_filtered.columns.tolist()}")
 
             if test_df is not None:
-                test_filtered = test_df[self._washing_target_columns].copy()
+                test_filtered = test_df[self.__target_columns].copy()
                 test_filtered['세정_Dummy_OP_1'] = 0.0
                 print(f"[*] 세정기 Test 데이터 필터링 완료: {test_filtered.columns.tolist()}")
 
@@ -100,8 +102,8 @@ class Washing(PINN):
 
             self._train_pinn(
                 train_df=filtered_train_df,
-                target_cols=self._washing_temp_cols,
-                op_cols=self._washing_op_cols,
+                target_cols=self.__temp_cols,
+                op_cols=self.__op_cols,
                 epochs=10000,  # 다른 기계들과 동일하게 10000 에포크로 세팅
                 sample_ratio=0.5
             )

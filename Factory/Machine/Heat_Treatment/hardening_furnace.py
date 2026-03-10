@@ -62,6 +62,8 @@ class HardeningFurnace(PINN):
         if test_df is not None:
             print("[*] 원자재(Test 데이터)를 활용하여 모델 평가를 진행합니다.")
             self._test_pinn(test_df, self.__temp_cols, self.__op_cols)
+            self._simulate_what_if_op(test_df, self.__temp_cols, self.__op_cols, self.__op_cols[0])
+            self._detect_anomalies(test_df, self.__temp_cols, self.__op_cols)
         else:
             print("[!] 경고: 입력된 원자재 데이터(raw_materials)가 없어 테스트를 건너뜁니다.")
 

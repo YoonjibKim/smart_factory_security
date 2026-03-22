@@ -10,14 +10,14 @@ class DefectPrediction:
     def __init__(self, model_dir_path):
         self.__model_dir_path = model_dir_path
 
-        # 🚀 캣부스트(CatBoost) GPU 모델 초기화 (RTX 5090 전용 세팅)
+        # 🚀 [수정됨] 엣지 디바이스(NVIDIA GPU 없음) 환경을 고려한 자동 분기 처리
+        # 환경 변수나 라이브러리 상태를 확인하기보다, try-except로 안전하게 CPU Fallback을 유도할 수 있도록
+        # 기본값은 CPU 호환 모드로 초기화합니다. 학습(build) 시에만 GPU 설정을 주입하도록 변경합니다.
         self.model = CatBoostRegressor(
             iterations=500,
             learning_rate=0.05,
             random_state=42,
-            verbose=100,            # 100번 학습할 때마다 로그 출력
-            task_type='GPU',        # 🚨 [추가됨] 연산을 CPU가 아닌 GPU(CUDA)로 수행하도록 강제
-            devices='0'             # 🚨 [추가됨] 0번 GPU(RTX 5090)를 명시적으로 할당
+            verbose=100
         )
 
         # 압축하기 전의 원본 센서 컬럼들
@@ -106,7 +106,6 @@ class DefectPrediction:
         """
         [학습 단계]
         공장의 과거 데이터(train_df)를 보고 캣부스트 모델을 GPU로 초고속 학습시킨 뒤 저장합니다.
-        (배차 단위 압축 및 조기 종료 기능 탑재)
         """
         print("\n================ [불량률 예측 AI (CatBoost GPU) 학습 시작] ================")
 
@@ -129,12 +128,21 @@ class DefectPrediction:
         X = train_clean[available_features]
         y = train_clean[self.target]
 
-        # 조기 종료를 위한 평가용 데이터(Validation Set) 분리 (Train 8 : Val 2)
         X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        # 3. 모델 학습 수행 (RTX 5090 풀가동 + 조기 종료)
+        # 3. 모델 학습 수행 (🚨 GPU 강제 할당을 학습 함수 내부에서 처리)
         print(f"[*] 학습 데이터 세팅 완료 (Train: {len(X_train)}배차, Val: {len(X_val)}배차).")
         print(f"[*] RTX 5090 가속 및 🚨조기 종료(Early Stopping)🚨 모드로 학습을 진행합니다...")
+
+        # 기존 self.model을 GPU 옵션이 추가된 모델로 새로 덮어씌움 (학습용 서버에서만 실행됨)
+        self.model = CatBoostRegressor(
+            iterations=500,
+            learning_rate=0.05,
+            random_state=42,
+            verbose=100,
+            task_type='GPU',
+            devices='0'
+        )
 
         self.model.fit(
             X_train, y_train,
@@ -143,13 +151,13 @@ class DefectPrediction:
             verbose=100
         )
 
-        # 4. 학습된 모델 저장 (.cbm은 캣부스트 전용 확장자입니다)
+        # 4. 학습된 모델 저장
         os.makedirs(self.__model_dir_path, exist_ok=True)
         model_save_path = os.path.join(self.__model_dir_path, "catboost_defect_model.cbm")
         self.model.save_model(model_save_path)
         print(f"[*] 학습 완료! 모델이 성공적으로 저장되었습니다 -> {model_save_path}")
 
-        # 5. 테스트 데이터 채점 (테스트 데이터도 압축해서 진행)
+        # 5. 테스트 데이터 채점
         if test_df is not None and not test_df.empty:
             test_agg = self._aggregate_by_batch(test_df)
             test_clean = test_agg.dropna(subset=available_features + [self.target]).copy()
@@ -165,24 +173,26 @@ class DefectPrediction:
         """
         [추론/가동 단계]
         저장된 GPU 모델을 불러와서 현재 공정에 투입된 자재(test_df)의 불량률을 예측합니다.
+        (엣지 디바이스에서는 자동으로 CPU를 사용하여 추론합니다.)
         """
-        print("\n================ [불량률 예측 AI (CatBoost GPU) 추론 가동] ================")
+        print("\n================ [불량률 예측 AI (CatBoost Edge CPU) 추론 가동] ================")
 
         model_load_path = os.path.join(self.__model_dir_path, "catboost_defect_model.cbm")
 
         # 1. 모델 불러오기
+        # (cbm 확장자 파일은 GPU에서 학습되었더라도 CPU 모드로 로드 및 추론이 가능합니다)
         if os.path.exists(model_load_path):
             self.model.load_model(model_load_path)
-            print(f"[*] 저장된 캣부스트 모델 로드 완료 -> {model_load_path}")
+            print(f"[*] 엣지 환경에 최적화된 캣부스트 모델(CPU) 로드 완료 -> {model_load_path}")
         else:
-            print(f"[!] 에러: 모델을 찾을 수 없습니다. 먼저 build를 실행해 주세요 -> {model_load_path}")
+            print(f"[!] 에러: 모델을 찾을 수 없습니다. 먼저 GPU 서버에서 build를 실행해 주세요 -> {model_load_path}")
             return test_df
 
         if test_df is None or test_df.empty:
             print("[!] 경고: 예측할 데이터(test_df)가 없어 추론을 건너뜁니다.")
             return test_df
 
-        # 테스트 데이터도 초 단위에서 배차 단위로 압축!
+        # 테스트 데이터 압축
         test_agg = self._aggregate_by_batch(test_df)
 
         # 2. 예측 수행을 위한 특성 필터링
@@ -192,13 +202,12 @@ class DefectPrediction:
         print(f"[*] 입력된 공정 데이터({len(X_test)}개 배차)의 최종 불량률 초고속 예측을 시작합니다...")
         y_pred = self.model.predict(X_test)
 
-        # 3. 원본 데이터의 맨 오른쪽에 'AI_예측_불량률' 컬럼 추가!
+        # 3. 결과 정리 및 출력
         result_df = test_agg.copy()
         result_df['AI_예측_불량률'] = y_pred
 
         print("\n[*] 🎯 예측 완료! (배차별 결과 종합)")
 
-        # 🚨 [신규] 실무용 판정 컬럼 및 절댓값 오차 출력 로직
         cols_to_show = []
         if '배정번호' in result_df.columns:
             cols_to_show.append('배정번호')
@@ -207,20 +216,16 @@ class DefectPrediction:
             cols_to_show.append('불량률')
             cols_to_show.append('AI_예측_불량률')
 
-            # 절대 오차 계산: |실제 불량률 - 예측 불량률|
             result_df['오차(절댓값)'] = (result_df['불량률'] - result_df['AI_예측_불량률']).abs()
             cols_to_show.append('오차(절댓값)')
 
-            # [핵심] 현업용 품질 판정 로직
-            # AI 예측 불량률이 0.1%(0.001) 이상이면 '🔴불량 경고', 미만이면 '🟢정상 양품'
             threshold = 0.001
             result_df['AI_품질판정'] = np.where(result_df['AI_예측_불량률'] >= threshold, '🔴불량 경고', '🟢정상 양품')
             cols_to_show.append('AI_품질판정')
         else:
             cols_to_show.append('AI_예측_불량률')
 
-        # 전체 배차의 예측 결과를 한눈에 보기 좋게 출력
-        pd.set_option('display.max_rows', 100) # 표가 잘리지 않게 설정
+        pd.set_option('display.max_rows', 100)
         print(result_df[cols_to_show].head(100))
         print("=======================================================================\n")
 

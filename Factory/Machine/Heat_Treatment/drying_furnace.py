@@ -34,25 +34,22 @@ class DryingFurnace(PINN):
         ]
 
     def operate_drying_furnace(self, materials=None):
-        print("건조로 동작 및 추론(테스트) 수행")
+        print("건조로 동작 및 추론(테스트) 수행 (Edge 모델 전용)")
         _, test_df = self._filter_features(test_df=materials)
 
-        # 🚨 [가장 중요한 핵심 버그 수정]
-        # 다중 상속 공유 메모리 문제로 인해, 테스트 직전에 '자신의 진짜 가중치(.pth)'를 무조건 다시 불러와야 합니다.
-        if self.pinn_model_path.endswith('/') or self.pinn_model_path.endswith('\\') or os.path.isdir(self.pinn_model_path):
-            actual_model_path = os.path.join(self.pinn_model_path, "drying_furnace_pinn.pth")
-        else:
-            actual_model_path = self.pinn_model_path
+        edge_model_dir = "Factory/Machine/Heat_Treatment/PINN/Edge_Model"
+        edge_model_path = os.path.join(edge_model_dir, "drying_furnace_hailo.onnx")
 
-        if os.path.exists(actual_model_path):
-            self.model.load_state_dict(torch.load(actual_model_path))
-            self.model.eval()
-            print(f"[*] 전용 두뇌 로드 완료: {actual_model_path}")
+        # 무조건 엣지 모델(ONNX)만 로드
+        if os.path.exists(edge_model_path):
+            self.edge_session = self._load_model(edge_model_path)
+            if self.edge_session:
+                print(f"[*] Edge 전용 두뇌(ONNX) 로드 완료: {edge_model_path}")
         else:
-            print(f"[!] 경고: {actual_model_path} 모델을 찾을 수 없습니다.")
+            raise FileNotFoundError(f"[!] 에러: Edge 모델을 찾을 수 없습니다. 빌드(build)를 먼저 수행하여 ONNX 모델을 생성하세요. 경로: {edge_model_path}")
 
         if test_df is not None:
-            print("[*] 원자재(Test 데이터)를 활용하여 모델 평가를 진행합니다.")
+            print("[*] 원자재(Test 데이터)를 활용하여 Edge 모델 평가를 진행합니다.")
             self._test_pinn(test_df, self.__temp_cols, self.__op_cols)
             self._simulate_what_if_op(test_df, self.__temp_cols, self.__op_cols, self.__op_cols[0])
             self._detect_anomalies(test_df, self.__temp_cols, self.__op_cols)
@@ -86,7 +83,8 @@ class DryingFurnace(PINN):
 
         self._make_model()
 
-        if self.pinn_model_path.endswith('/') or self.pinn_model_path.endswith('\\') or os.path.isdir(self.pinn_model_path):
+        if self.pinn_model_path.endswith('/') or self.pinn_model_path.endswith('\\') or os.path.isdir(
+                self.pinn_model_path):
             actual_model_path = os.path.join(self.pinn_model_path, "drying_furnace_pinn.pth")
         else:
             actual_model_path = self.pinn_model_path
@@ -108,14 +106,51 @@ class DryingFurnace(PINN):
             torch.save(self.model.state_dict(), actual_model_path)
             print(f"[*] 학습 완료: 모델이 성공적으로 저장되었습니다 -> {actual_model_path}")
 
+            print("[*] Edge 모델(ONNX) 변환을 시작합니다...")
+            onnx_bytes = self._convert_onnx_model(self.model)
+
+            if onnx_bytes:
+                edge_model_dir = "Factory/Machine/Heat_Treatment/PINN/Edge_Model"
+                os.makedirs(edge_model_dir, exist_ok=True)
+
+                edge_model_path = os.path.join(edge_model_dir, "drying_furnace_hailo.onnx")
+
+                with open(edge_model_path, "wb") as f:
+                    f.write(onnx_bytes)
+
+                print(f"[*] 변환된 Edge 모델(ONNX) 저장 완료 -> {edge_model_path}")
+
         else:
-            print(f"[*] 추론 모드 작동: 저장된 건조로 모델을 불러옵니다.")
-            if os.path.exists(actual_model_path):
-                self.model.load_state_dict(torch.load(actual_model_path))
+            print(f"[*] 추론 모드 작동: 저장된 모델을 불러옵니다.")
+
+            edge_model_dir = "Factory/Machine/Heat_Treatment/PINN/Edge_Model"
+            edge_model_path = os.path.join(edge_model_dir, "drying_furnace_hailo.onnx")
+
+            if os.path.exists(edge_model_path):
+                print(f"[*] Edge 모델 발견! 로드를 시도합니다 -> {edge_model_path}")
+                self.edge_session = self._load_model(edge_model_path)
+                if self.edge_session:
+                    print("[*] Edge 모델(ONNX) 로드 성공!")
+
+            elif os.path.exists(actual_model_path):
+                print(f"[*] Edge 모델이 없습니다. 기존 PyTorch 모델을 로드하여 즉시 ONNX로 변환합니다 -> {actual_model_path}")
+
+                self.model.load_state_dict(torch.load(actual_model_path, map_location='cpu'))
                 self.model.eval()
-                print(f"[*] 모델 로드 성공 -> {actual_model_path}")
+                print(f"[*] PyTorch 모델 로드 성공! (CPU 메모리 안착)")
+
+                print("[*] 기존 모델을 바탕으로 Edge 모델(ONNX) 자동 변환을 시작합니다...")
+                onnx_bytes = self._convert_onnx_model(self.model)
+
+                if onnx_bytes:
+                    os.makedirs(edge_model_dir, exist_ok=True)
+                    with open(edge_model_path, "wb") as f:
+                        f.write(onnx_bytes)
+                    print(f"[*] ✅ 자동 변환 및 Edge 모델(ONNX) 저장 완료 -> {edge_model_path}")
+
+                    self.edge_session = self._load_model(edge_model_path)
             else:
-                print(f"[!] 에러: 지정된 경로에서 모델을 찾을 수 없습니다 -> {actual_model_path}")
+                print(f"[!] 에러: 지정된 경로에서 모델을 찾을 수 없습니다.")
 
     def _compute_physics_loss(self, t, x, op):
         inputs = torch.cat([t, x, op], dim=1)

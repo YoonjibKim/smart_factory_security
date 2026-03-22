@@ -7,7 +7,6 @@ class SaltBath(PINN):
     def __init__(self, train_pinn_flag, pinn_model_path):
         PINN.__init__(self)
 
-        # 🚨 파라미터로 받은 변수를 클래스 내부에서 사용할 수 있도록 저장
         self.train_pinn_flag = train_pinn_flag
         self.pinn_model_path = pinn_model_path
 
@@ -24,31 +23,25 @@ class SaltBath(PINN):
             '솔트조 온도 2 Zone'
         ]
 
-        # 🚨 [수정됨] PINN.py 에러 방지를 위해 가짜(Dummy) OP 컬럼 이름 지정
-        # (온도 Zone 개수에 맞춰 2개를 만들어 줍니다)
         self.__op_cols = ['솔트_Dummy_OP_1', '솔트_Dummy_OP_2']
 
     def operate_salt_bath(self, materials=None):  # noqa
-        print("솔트조 동작 및 추론(테스트) 수행")
+        print("솔트조 동작 및 추론(테스트) 수행 (Edge 모델 전용)")
         _, test_df = self._filter_features(test_df=materials)
 
-        # 🚨 [핵심 버그 수정] 테스트 직전에 '솔트조 전용 가중치(.pth)'를 무조건 다시 불러오기
-        if self.pinn_model_path.endswith('/') or self.pinn_model_path.endswith('\\') or os.path.isdir(
-                self.pinn_model_path):
-            actual_model_path = os.path.join(self.pinn_model_path, "salt_bath_pinn.pth")
-        else:
-            actual_model_path = self.pinn_model_path
+        edge_model_dir = "Factory/Machine/Heat_Treatment/PINN/Edge_Model"
+        edge_model_path = os.path.join(edge_model_dir, "salt_bath_hailo.onnx")
 
-        if os.path.exists(actual_model_path):
-            self.model.load_state_dict(torch.load(actual_model_path))
-            self.model.eval()
-            print(f"[*] 전용 두뇌 로드 완료: {actual_model_path}")
+        # 무조건 엣지 모델(ONNX)만 로드
+        if os.path.exists(edge_model_path):
+            self.edge_session = self._load_model(edge_model_path)
+            if self.edge_session:
+                print(f"[*] Edge 전용 두뇌(ONNX) 로드 완료: {edge_model_path}")
         else:
-            print(f"[!] 경고: {actual_model_path} 모델을 찾을 수 없습니다.")
+            raise FileNotFoundError(f"[!] 에러: Edge 모델을 찾을 수 없습니다. 빌드(build)를 먼저 수행하여 ONNX 모델을 생성하세요. 경로: {edge_model_path}")
 
-        # 테스트 수행
         if test_df is not None:
-            print("[*] 원자재(Test 데이터)를 활용하여 모델 평가를 진행합니다.")
+            print("[*] 원자재(Test 데이터)를 활용하여 Edge 모델 평가를 진행합니다.")
             self._test_pinn(test_df, self.__temp_cols, self.__op_cols)
             self._simulate_what_if_op(test_df, self.__temp_cols, self.__op_cols, self.__op_cols[0])
             self._detect_anomalies(test_df, self.__temp_cols, self.__op_cols)
@@ -58,17 +51,12 @@ class SaltBath(PINN):
         return materials
 
     def _filter_features(self, train_df=None, test_df=None):
-        """
-        솔트조 PINN 학습에 필요한 핵심 센서 데이터를 추출합니다.
-        (부모 클래스 규격에 맞춰 _filter_features로 이름 변경 및 None 처리 추가)
-        """
         train_filtered = None
         test_filtered = None
 
         try:
             if train_df is not None:
                 train_filtered = train_df[self.__target_columns].copy()
-                # 🚨 PINN.py를 속이기 위해 값이 0인 가짜 OP 컬럼을 추가
                 train_filtered['솔트_Dummy_OP_1'] = 0.0
                 train_filtered['솔트_Dummy_OP_2'] = 0.0
                 print(f"[*] 솔트조 Train 데이터 필터링 완료: {train_filtered.columns.tolist()}")
@@ -93,26 +81,23 @@ class SaltBath(PINN):
 
         self._make_model()
 
-        # 🚨 경로 자동 정리
         if self.pinn_model_path.endswith('/') or self.pinn_model_path.endswith('\\') or os.path.isdir(
                 self.pinn_model_path):
             actual_model_path = os.path.join(self.pinn_model_path, "salt_bath_pinn.pth")
         else:
             actual_model_path = self.pinn_model_path
 
-        # 🚨 학습 및 저장/로드 로직
         if self.train_pinn_flag:
             print(f"[*] 학습 모드 작동: 솔트조 모델 학습을 시작합니다.")
 
             self._train_pinn(
                 train_df=filtered_train_df,
                 target_cols=self.__temp_cols,
-                op_cols=self.__op_cols,  # 이제 빈 리스트가 아니라 가짜 OP 2개가 들어갑니다.
-                epochs=10000,  # 🚨 다른 장비와 동일하게 10000으로 수정
+                op_cols=self.__op_cols,
+                epochs=10000,
                 sample_ratio=0.5
             )
 
-            # 모델 저장 로직
             save_dir = os.path.dirname(actual_model_path)
             if save_dir:
                 os.makedirs(save_dir, exist_ok=True)
@@ -120,23 +105,53 @@ class SaltBath(PINN):
             torch.save(self.model.state_dict(), actual_model_path)
             print(f"[*] 학습 완료: 모델이 성공적으로 저장되었습니다 -> {actual_model_path}")
 
+            print("[*] Edge 모델(ONNX) 변환을 시작합니다...")
+            onnx_bytes = self._convert_onnx_model(self.model)
+
+            if onnx_bytes:
+                edge_model_dir = "Factory/Machine/Heat_Treatment/PINN/Edge_Model"
+                os.makedirs(edge_model_dir, exist_ok=True)
+
+                edge_model_path = os.path.join(edge_model_dir, "salt_bath_hailo.onnx")
+
+                with open(edge_model_path, "wb") as f:
+                    f.write(onnx_bytes)
+
+                print(f"[*] 변환된 Edge 모델(ONNX) 저장 완료 -> {edge_model_path}")
+
         else:
-            # 학습을 하지 않을 경우 저장된 모델 불러오기
-            print(f"[*] 추론 모드 작동: 저장된 솔트조 모델을 불러옵니다.")
-            if os.path.exists(actual_model_path):
-                self.model.load_state_dict(torch.load(actual_model_path))
+            print(f"[*] 추론 모드 작동: 저장된 모델을 불러옵니다.")
+
+            edge_model_dir = "Factory/Machine/Heat_Treatment/PINN/Edge_Model"
+            edge_model_path = os.path.join(edge_model_dir, "salt_bath_hailo.onnx")
+
+            if os.path.exists(edge_model_path):
+                print(f"[*] Edge 모델 발견! 로드를 시도합니다 -> {edge_model_path}")
+                self.edge_session = self._load_model(edge_model_path)
+                if self.edge_session:
+                    print("[*] Edge 모델(ONNX) 로드 성공!")
+
+            elif os.path.exists(actual_model_path):
+                print(f"[*] Edge 모델이 없습니다. 기존 PyTorch 모델을 로드하여 즉시 ONNX로 변환합니다 -> {actual_model_path}")
+
+                self.model.load_state_dict(torch.load(actual_model_path, map_location='cpu'))
                 self.model.eval()
-                print(f"[*] 모델 로드 성공 -> {actual_model_path}")
+                print(f"[*] PyTorch 모델 로드 성공! (CPU 메모리 안착)")
+
+                print("[*] 기존 모델을 바탕으로 Edge 모델(ONNX) 자동 변환을 시작합니다...")
+                onnx_bytes = self._convert_onnx_model(self.model)
+
+                if onnx_bytes:
+                    os.makedirs(edge_model_dir, exist_ok=True)
+                    with open(edge_model_path, "wb") as f:
+                        f.write(onnx_bytes)
+                    print(f"[*] ✅ 자동 변환 및 Edge 모델(ONNX) 저장 완료 -> {edge_model_path}")
+
+                    self.edge_session = self._load_model(edge_model_path)
             else:
-                print(f"[!] 에러: 지정된 경로에서 모델을 찾을 수 없습니다 -> {actual_model_path}")
+                print(f"[!] 에러: 지정된 경로에서 모델을 찾을 수 없습니다.")
 
     def _compute_physics_loss(self, t, x, op):
-        """
-        솔트조의 1차원 열전도 방정식 물리 손실 계산
-        (수정된 pinn.py의 Stacked Input에 맞추어 통합 편미분 계산으로 최적화)
-        """
-        # 🚨 차원 불일치 에러를 막기 위해 op를 반드시 포함시킵니다!
-        # (op는 모두 0이므로 신경망 연산에 영향을 주지 않고 차원만 맞춰줍니다.)
         inputs = torch.cat([t, x, op], dim=1)
         u = self.model(inputs)
 
@@ -144,8 +159,6 @@ class SaltBath(PINN):
         u_x = torch.autograd.grad(u, x, grad_outputs=torch.ones_like(u), create_graph=True)[0]
         u_xx = torch.autograd.grad(u_x, x, grad_outputs=torch.ones_like(u_x), create_graph=True)[0]
 
-        # f = u_t - alpha * u_xx (열원이 없는 순수 열전도 방정식)
         f = u_t - self.salt_bath_alpha * u_xx
-
         physics_loss = torch.mean(f ** 2)
         return physics_loss

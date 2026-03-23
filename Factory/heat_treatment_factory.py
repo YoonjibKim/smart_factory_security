@@ -1,9 +1,11 @@
 from Factory.Machine.Heat_Treatment.heat_treatment_machine import HeatTreatmentMachine
 from Factory.Materials.Heat_Treatment.heat_treatment_materials import HeatTreatmentMaterials
+from Factory.PMU.pmu import PMU
 
 
-class HeatTreatmentFactory:
+class HeatTreatmentFactory(PMU):
     def __init__(self, preprocess_dataset_flag=False, train_pinn_flag=False):
+        PMU.__init__(self)
         # 자재 및 머신 객체 초기화 (메인 메모리에 안전하게 적재됨)
         self.__materials = HeatTreatmentMaterials()
         self.__machine = HeatTreatmentMachine(preprocess_dataset_flag, train_pinn_flag)

@@ -75,9 +75,29 @@ class HeatTreatmentMachine(PMU):
         print(f"Train 데이터 크기: {train_df.shape}, Test 데이터 크기: {test_df.shape}")
         print(f"파일 저장 완료: {os.path.abspath(merged_dir_path)} 폴더를 확인하세요.")
 
+    # --- 실제 공정 함수에 적용 ---
     def operate_drying_furnace(self, materials=None):
+        pmu = PMU()
 
+        # 1. 수집 시작
+        pmu._start_perf_top()
+        pmu._start_perf_stat()
+
+        # 2. 본래의 건조로 로직 실행 (Hailo 추론 등)
         result = self.__drying_furnace.operate_drying_furnace(materials)
+
+        # 3. 수집 종료 및 데이터 획득
+        df_stat, df_top = pmu.stop_and_collect()
+
+        # 4. 결과 출력
+        print("\n[PERF STAT DATA]")
+        print(df_stat.head())
+        print("\n[PERF TOP DATA]")
+        print(df_top.head())
+
+        # 5. 필요 시 병합(Merge) 로직 추가 가능
+        # final_df = pd.merge_asof(df_stat, df_top, left_on='Time', right_on='Time_Idx')
+
         return result
 
     def build_drying_furnace(self):

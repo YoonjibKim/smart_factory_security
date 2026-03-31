@@ -77,10 +77,11 @@ class HeatTreatmentMachine(PMU):
 
     # --- 실제 공정 함수에 적용 ---
     def operate_drying_furnace(self, materials=None):
+        # top_n=5 가 기본값으로 설정되어 있습니다. (PMU(top_n=10) 등으로 변경 가능)
         pmu = PMU()
 
-        # 1. 수집 시작
-        pmu._start_perf_top()
+        # 1. 수집 시작 (이름 변경: _start_perf_top -> _start_perf_record)
+        pmu._start_perf_record()
         pmu._start_perf_stat()
 
         # 2. 본래의 건조로 로직 실행 (Hailo 추론 등)
@@ -91,9 +92,12 @@ class HeatTreatmentMachine(PMU):
 
         # 4. 결과 출력
         print("\n[PERF STAT DATA]")
-        print(df_stat.head())
+        # 5초간의 전체 히스토리를 보기 위해 .head() 제거
+        print(df_stat)
+
         print("\n[PERF TOP DATA]")
-        print(df_top.head())
+        # 매 1초마다 상위 5개씩 기록된 전체 시계열 데이터를 보기 위해 .head() 제거
+        print(df_top)
 
         # 5. 필요 시 병합(Merge) 로직 추가 가능
         # final_df = pd.merge_asof(df_stat, df_top, left_on='Time', right_on='Time_Idx')

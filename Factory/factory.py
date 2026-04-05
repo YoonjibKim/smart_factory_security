@@ -7,8 +7,8 @@ class Factory(HeatTreatmentFactory):
         HeatTreatmentFactory.__init__(self, preprocess_dataset_flag, train_pinn_flag)
         self.__heat_treatment_defect_predictor = DefectPrediction(model_dir_path="Factory/Defect_Prediction/Model")
 
-    def build_heat_treatment_factory(self):
-        self._build_heat_treatment_factory()
+    def build_heat_treatment_factory(self, is_pce=False):
+        self._build_heat_treatment_factory(is_pce)
 
     def operate_heat_treatment_factory(self):
         self._operate_heat_treatment()

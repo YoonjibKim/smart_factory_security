@@ -8,17 +8,21 @@ class HeatTreatmentFactory:
         self.__materials = HeatTreatmentMaterials()
         self.__machine = HeatTreatmentMachine(preprocess_dataset_flag, train_pinn_flag)
 
-    def _build_heat_treatment_factory(self):
-        print("\n================ 열처리 공장 구축 시작 ================")
-        print("[*] 각 공정의 PINN 모델 및 설비를 순차적으로 초기화합니다...")
+    def _build_heat_treatment_factory(self, is_pce=False):
+        if not is_pce:
+            print("\n================ 열처리 공장 구축 시작 ================")
+            print("[*] 각 공정의 PINN 모델 및 설비를 순차적으로 초기화합니다...")
 
-        # 각 공정의 모델을 순차적으로 빌드(로드)합니다.
-        self.__machine.build_drying_furnace()
-        self.__machine.build_hardening_furnace()
-        self.__machine.build_salt_bath()
-        self.__machine.build_washing()
+            # 각 공정의 모델을 순차적으로 빌드(로드)합니다.
+            self.__machine.build_drying_furnace()
+            self.__machine.build_hardening_furnace()
+            self.__machine.build_salt_bath()
+            self.__machine.build_washing()
 
-        print("[*] 열처리 공장 구축 및 메모리 적재 완료.\n")
+            print("[*] 열처리 공장 구축 및 메모리 적재 완료.\n")
+        else:
+            self._operate_heat_treatment()
+            pass
 
     def _operate_heat_treatment(self):
         print("\n================ 열처리 공정 시작 ================")

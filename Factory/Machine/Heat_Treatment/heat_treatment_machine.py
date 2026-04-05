@@ -1,3 +1,5 @@
+import datetime
+
 from Factory.Machine.Heat_Treatment.conveyor_belt import ConveyorBelt
 from Factory.Machine.Heat_Treatment.drying_furnace import DryingFurnace
 from Factory.Machine.Heat_Treatment.feeder import Feeder
@@ -35,6 +37,35 @@ class HeatTreatmentMachine(PMU):
 
         self.__train_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Processed/train_data.csv"
         self.__test_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Processed/test_data.csv"
+
+    def __save_pmu_data(self, df_stat, df_top, type, base_dir):
+        """
+        df_stat와 df_top 데이터프레임을 type에 따라 구분하여 지정된 경로에 CSV로 저장합니다.
+        """
+        # 1. 저장할 디렉토리가 없으면 생성
+        if not os.path.exists(base_dir):
+            os.makedirs(base_dir)
+            print(f"Directory created: {base_dir}")
+
+        # 2. 파일명 생성을 위한 현재 시간 포맷팅
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # 3. 파일 경로 설정 (파일명에 {type} 추가)
+        # 예: perf_stat_attack_20260405_231107.csv
+        stat_path = os.path.join(base_dir, f"perf_stat_{type}_{timestamp}.csv")
+        top_path = os.path.join(base_dir, f"perf_top_{type}_{timestamp}.csv")
+
+        try:
+            # 4. CSV 저장
+            df_stat.to_csv(stat_path, index=False, encoding='utf-8-sig')
+            df_top.to_csv(top_path, index=False, encoding='utf-8-sig')
+
+            print(f"Successfully saved ({type}):")
+            print(f" - {stat_path}")
+            print(f" - {top_path}")
+
+        except Exception as e:
+            print(f"Error saving data ({type}): {e}")
 
     def __preprocess_heat_treatment_dataset(self, raw_dataset_path, quality_dataset_path, merged_dir_path):  # noqa
         print(f"원본 데이터셋 로드: {raw_dataset_path}")
@@ -98,9 +129,7 @@ class HeatTreatmentMachine(PMU):
         print("\n[PERF TOP DATA]")
         # 매 1초마다 상위 5개씩 기록된 전체 시계열 데이터를 보기 위해 .head() 제거
         print(df_top)
-
-        # 5. 필요 시 병합(Merge) 로직 추가 가능
-        # final_df = pd.merge_asof(df_stat, df_top, left_on='Time', right_on='Time_Idx')
+        self.__save_pmu_data(df_stat, df_top, 'drying_furnace', 'Factory/PMU/Data')
 
         return result
 
@@ -108,7 +137,19 @@ class HeatTreatmentMachine(PMU):
         self.__drying_furnace.build_drying_furnace(self.__train_dataset_path, self.__test_dataset_path)
 
     def operate_hardening_furnace(self, materials=None):
+        pmu = PMU()
+        pmu._start_perf_record()
+        pmu._start_perf_stat()
+
         result = self.__hardening_furnace.operate_hardening_furnace(materials)
+
+        df_stat, df_top = pmu.stop_and_collect()
+        print("\n[PERF STAT DATA]")
+        print(df_stat)
+        print("\n[PERF TOP DATA]")
+        print(df_top)
+        self.__save_pmu_data(df_stat, df_top, 'hardening_furnace', 'Factory/PMU/Data')
+
         return result
 
     def build_hardening_furnace(self):
@@ -129,7 +170,19 @@ class HeatTreatmentMachine(PMU):
         self.__rust_prevention.build_rust_prevention()
 
     def operate_salt_bath(self, materials=None):
+        pmu = PMU()
+        pmu._start_perf_record()
+        pmu._start_perf_stat()
+
         result = self.__salt_bath.operate_salt_bath(materials)
+
+        df_stat, df_top = pmu.stop_and_collect()
+        print("\n[PERF STAT DATA]")
+        print(df_stat)
+        print("\n[PERF TOP DATA]")
+        print(df_top)
+        self.__save_pmu_data(df_stat, df_top, 'salt_bath', 'Factory/PMU/Data')
+
         return result
 
     def build_salt_bath(self):
@@ -143,7 +196,19 @@ class HeatTreatmentMachine(PMU):
         self.__tempering_furnace.build_tempering_furnace()
 
     def operate_washing(self, materials=None):
+        pmu = PMU()
+        pmu._start_perf_record()
+        pmu._start_perf_stat()
+
         result = self.__washing.operate_washing(materials)
+
+        df_stat, df_top = pmu.stop_and_collect()
+        print("\n[PERF STAT DATA]")
+        print(df_stat)
+        print("\n[PERF TOP DATA]")
+        print(df_top)
+        self.__save_pmu_data(df_stat, df_top, 'washing', 'Factory/PMU/Data')
+
         return result
 
     def build_washing(self):

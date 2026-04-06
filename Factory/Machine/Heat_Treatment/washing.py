@@ -23,6 +23,9 @@ class Washing(PINN):
 
         self.__op_cols = ['세정_Dummy_OP_1']
 
+    def get_target_columns(self):
+        return self.__target_columns
+
     def operate_washing(self, materials=None):  # noqa
         print("세정기 동작 및 추론(테스트) 수행 (Edge 모델 전용)")
         _, test_df = self._filter_features(test_df=materials)

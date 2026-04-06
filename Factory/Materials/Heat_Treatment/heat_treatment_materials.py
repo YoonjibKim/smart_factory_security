@@ -9,7 +9,6 @@ class HeatTreatmentMaterials:
         file_path = 'Factory/PINN/Dataset/Heat_Treatment/Processed/test_data.csv'
 
         try:
-            # CSV 파일을 DataFrame으로 변환
             df = pd.read_csv(file_path, encoding='cp949')
             print(f"[*] 원소재(Test Data) 로드 완료: 총 {len(df)}행 데이터가 투입됩니다.")
             return df

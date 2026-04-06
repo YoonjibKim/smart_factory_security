@@ -38,25 +38,20 @@ class HeatTreatmentMachine(PMU):
         self.__train_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Processed/train_data.csv"
         self.__test_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Processed/test_data.csv"
 
-    def __save_pmu_data(self, df_stat, df_top, type, base_dir):
+    def __save_pmu_data(self, df_stat, df_top, type, base_dir): # noqa
         """
         df_stat와 df_top 데이터프레임을 type에 따라 구분하여 지정된 경로에 CSV로 저장합니다.
         """
-        # 1. 저장할 디렉토리가 없으면 생성
         if not os.path.exists(base_dir):
             os.makedirs(base_dir)
             print(f"Directory created: {base_dir}")
 
-        # 2. 파일명 생성을 위한 현재 시간 포맷팅
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # 3. 파일 경로 설정 (파일명에 {type} 추가)
-        # 예: perf_stat_attack_20260405_231107.csv
         stat_path = os.path.join(base_dir, f"perf_stat_{type}_{timestamp}.csv")
         top_path = os.path.join(base_dir, f"perf_top_{type}_{timestamp}.csv")
 
         try:
-            # 4. CSV 저장
             df_stat.to_csv(stat_path, index=False, encoding='utf-8-sig')
             df_top.to_csv(top_path, index=False, encoding='utf-8-sig')
 
@@ -75,13 +70,13 @@ class HeatTreatmentMachine(PMU):
         print(f"품질 데이터셋 로드: {quality_dataset_path}")
         quality_dataset_df = pd.read_excel(quality_dataset_path)
 
-        raw_dataset_df['배정번호'] = raw_dataset_df['배정번호'].astype(str)
+        raw_dataset_df['배정번호'] = raw_dataset_df['배정번호'].astype(str) # noqa
         quality_dataset_df['배정번호'] = quality_dataset_df['배정번호'].astype(str)
 
         target_columns = ['배정번호', '작업일', '양품수량', '불량수량', '총수량']
         quality_subset = quality_dataset_df[target_columns]
 
-        df_merged = pd.merge(raw_dataset_df, quality_subset, on='배정번호', how='left')
+        df_merged = pd.merge(raw_dataset_df, quality_subset, on='배정번호', how='left') # noqa
         df_merged['불량률'] = (df_merged['불량수량'] / df_merged['총수량']).fillna(0)
 
         os.makedirs(merged_dir_path, exist_ok=True)
@@ -106,28 +101,21 @@ class HeatTreatmentMachine(PMU):
         print(f"Train 데이터 크기: {train_df.shape}, Test 데이터 크기: {test_df.shape}")
         print(f"파일 저장 완료: {os.path.abspath(merged_dir_path)} 폴더를 확인하세요.")
 
-    # --- 실제 공정 함수에 적용 ---
     def operate_drying_furnace(self, materials=None):
         # top_n=5 가 기본값으로 설정되어 있습니다. (PMU(top_n=10) 등으로 변경 가능)
         pmu = PMU()
 
-        # 1. 수집 시작 (이름 변경: _start_perf_top -> _start_perf_record)
         pmu._start_perf_record()
         pmu._start_perf_stat()
 
-        # 2. 본래의 건조로 로직 실행 (Hailo 추론 등)
         result = self.__drying_furnace.operate_drying_furnace(materials)
 
-        # 3. 수집 종료 및 데이터 획득
         df_stat, df_top = pmu.stop_and_collect()
 
-        # 4. 결과 출력
         print("\n[PERF STAT DATA]")
-        # 5초간의 전체 히스토리를 보기 위해 .head() 제거
         print(df_stat)
 
         print("\n[PERF TOP DATA]")
-        # 매 1초마다 상위 5개씩 기록된 전체 시계열 데이터를 보기 위해 .head() 제거
         print(df_top)
         self.__save_pmu_data(df_stat, df_top, 'drying_furnace', 'Factory/PMU/Data')
 

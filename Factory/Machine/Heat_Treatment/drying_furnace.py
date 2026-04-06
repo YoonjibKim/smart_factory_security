@@ -33,6 +33,9 @@ class DryingFurnace(PINN):
             '소입3존 OP', '소입4존 OP'
         ]
 
+    def get_target_columns(self):
+        return self.__target_columns
+
     def operate_drying_furnace(self, materials=None):
         print("건조로 동작 및 추론(테스트) 수행 (Edge 모델 전용)")
         _, test_df = self._filter_features(test_df=materials)
@@ -41,9 +44,9 @@ class DryingFurnace(PINN):
         edge_model_path = os.path.join(edge_model_dir, "drying_furnace_hailo.onnx")
 
         # 무조건 엣지 모델(ONNX)만 로드
-        if os.path.exists(edge_model_path):
-            self.edge_session = self._load_model(edge_model_path)
-            if self.edge_session:
+        if os.path.exists(edge_model_path): # noqa
+            self.__edge_session = self._load_model(edge_model_path) # noqa
+            if self.__edge_session:
                 print(f"[*] Edge 전용 두뇌(ONNX) 로드 완료: {edge_model_path}")
         else:
             raise FileNotFoundError(f"[!] 에러: Edge 모델을 찾을 수 없습니다. 빌드(build)를 먼저 수행하여 ONNX 모델을 생성하세요. 경로: {edge_model_path}")
@@ -128,8 +131,8 @@ class DryingFurnace(PINN):
 
             if os.path.exists(edge_model_path):
                 print(f"[*] Edge 모델 발견! 로드를 시도합니다 -> {edge_model_path}")
-                self.edge_session = self._load_model(edge_model_path)
-                if self.edge_session:
+                self.__edge_session = self._load_model(edge_model_path)
+                if self.__edge_session:
                     print("[*] Edge 모델(ONNX) 로드 성공!")
 
             elif os.path.exists(actual_model_path):
@@ -148,7 +151,7 @@ class DryingFurnace(PINN):
                         f.write(onnx_bytes)
                     print(f"[*] ✅ 자동 변환 및 Edge 모델(ONNX) 저장 완료 -> {edge_model_path}")
 
-                    self.edge_session = self._load_model(edge_model_path)
+                    self.__edge_session = self._load_model(edge_model_path) # noqa
             else:
                 print(f"[!] 에러: 지정된 경로에서 모델을 찾을 수 없습니다.")
 

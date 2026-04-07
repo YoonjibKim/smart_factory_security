@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import os
 import torch
-import copy
 from torch import nn
 from torch import optim
 from Factory.Edge_Model.edge_model import EdgeModel
@@ -15,14 +14,14 @@ class PINN(EdgeModel):
         self.optimizer = None
         EdgeModel.__init__(self)
 
-    def _load_dataset(self, train_data_path, test_data_path):  # noqa
+    def _load_dataset(self, train_data_path, test_data_path): # noqa
         if not os.path.exists(train_data_path) or not os.path.exists(test_data_path):
             raise FileNotFoundError("데이터 경로를 확인해주세요.")
 
-        train_df = pd.read_csv(train_data_path, encoding='cp949')
-        test_df = pd.read_csv(test_data_path, encoding='cp949')
+        train_df = pd.read_csv(train_data_path, encoding='cp949') # noqa
+        test_df = pd.read_csv(test_data_path, encoding='cp949') # noqa
 
-        print(f"Dataset Loaded: Train({len(train_df)}), Test({len(test_df)})")
+        print(f"Dataset Loaded: Train({len(train_df)}), Test({len(test_df)})") # noqa
         return train_df, test_df
 
     def _convert_to_edge_model(self, model):

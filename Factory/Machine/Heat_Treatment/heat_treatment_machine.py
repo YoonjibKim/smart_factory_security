@@ -1,5 +1,3 @@
-import datetime
-
 from Factory.Machine.Heat_Treatment.conveyor_belt import ConveyorBelt
 from Factory.Machine.Heat_Treatment.drying_furnace import DryingFurnace
 from Factory.Machine.Heat_Treatment.feeder import Feeder
@@ -10,6 +8,7 @@ from Factory.Machine.Heat_Treatment.salt_bath import SaltBath
 from Factory.Machine.Heat_Treatment.tempering_furnace import TemperingFurnace
 from Factory.Machine.Heat_Treatment.washing import Washing
 from Factory.PMU.pmu import PMU
+from enum import Enum
 import pandas as pd
 import os
 
@@ -38,6 +37,35 @@ class HeatTreatmentMachine(PMU):
         self.__train_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Processed/train_data.csv"
         self.__test_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Processed/test_data.csv"
 
+        self.__pmu_save_dir_path = "Factory/PMU/Data"
+
+    class MachineType(Enum):
+        DRYING = "drying_furnace"
+        HARDENING = "hardening_furnace"
+        SALT_BATH = "salt_bath"
+        WASHING = "washing"
+
+    def get_pmu_save_dir_path(self):
+        return self.__pmu_save_dir_path
+
+    def get_target_columns(self, machine_type: MachineType):
+        if machine_type == self.MachineType.DRYING:
+            return self.__drying_furnace.get_target_columns()
+        elif machine_type == self.MachineType.HARDENING:
+            return self.__hardening_furnace.get_target_columns()
+        elif machine_type == self.MachineType.SALT_BATH:
+            return self.__salt_bath.get_target_columns()
+        elif machine_type == self.MachineType.WASHING:
+            return self.__washing.get_target_columns()
+        else:
+            return None
+
+    def get_train_dataset_path(self):
+        return self.__train_dataset_path
+
+    def get_test_dataset_path(self):
+        return self.__test_dataset_path
+
     def __save_pmu_data(self, df_stat, df_top, type, base_dir): # noqa
         """
         df_stat와 df_top 데이터프레임을 type에 따라 구분하여 지정된 경로에 CSV로 저장합니다.
@@ -46,10 +74,8 @@ class HeatTreatmentMachine(PMU):
             os.makedirs(base_dir)
             print(f"Directory created: {base_dir}")
 
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        stat_path = os.path.join(base_dir, f"perf_stat_{type}_{timestamp}.csv")
-        top_path = os.path.join(base_dir, f"perf_top_{type}_{timestamp}.csv")
+        stat_path = os.path.join(base_dir, f"perf_stat_{type}.csv")
+        top_path = os.path.join(base_dir, f"perf_top_{type}.csv")
 
         try:
             df_stat.to_csv(stat_path, index=False, encoding='utf-8-sig')
@@ -65,7 +91,7 @@ class HeatTreatmentMachine(PMU):
     def __preprocess_heat_treatment_dataset(self, raw_dataset_path, quality_dataset_path, merged_dir_path):  # noqa
         print(f"원본 데이터셋 로드: {raw_dataset_path}")
 
-        raw_dataset_df = pd.read_csv(raw_dataset_path, encoding="cp949", engine="python")
+        raw_dataset_df = pd.read_csv(raw_dataset_path, encoding="cp949", engine="python") # noqa
 
         print(f"품질 데이터셋 로드: {quality_dataset_path}")
         quality_dataset_df = pd.read_excel(quality_dataset_path)
@@ -117,7 +143,7 @@ class HeatTreatmentMachine(PMU):
 
         print("\n[PERF TOP DATA]")
         print(df_top)
-        self.__save_pmu_data(df_stat, df_top, 'drying_furnace', 'Factory/PMU/Data')
+        self.__save_pmu_data(df_stat, df_top, 'drying_furnace', self.__pmu_save_dir_path)
 
         return result
 

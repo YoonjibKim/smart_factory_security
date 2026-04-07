@@ -6,7 +6,7 @@ class EdgeModel:
     def __init__(self):
         pass
 
-    def _convert_onnx_model(self, pytorch_model):
+    def _convert_onnx_model(self, pytorch_model): # noqa
         # 1. 파일 경로 대신 메모리 버퍼를 생성합니다.
         onnx_buffer = io.BytesIO()
 
@@ -20,8 +20,8 @@ class EdgeModel:
         try:
             torch.onnx.export(
                 pytorch_model,
-                dummy_input,
-                onnx_buffer,
+                dummy_input, # noqa
+                onnx_buffer, # noqa
                 export_params=True,
                 opset_version=14,  # 🚨 11 -> 14로 상향 조정 (버전 충돌/Gemm 에러 해결)
                 do_constant_folding=True,
@@ -42,9 +42,9 @@ class EdgeModel:
         """저장된 에지 모델(ONNX)을 onnxruntime 세션으로 로드합니다."""
         try:
             # ONNX 런타임을 사용해 에지 모델 세션 생성
-            edge_session = ort.InferenceSession(edge_model_path)
+            self.edge_session = ort.InferenceSession(edge_model_path)
             print(f"[*] Edge 모델(ONNX) 전용 런타임 메모리 적재 성공")
-            return edge_session
+            return self.edge_session
         except Exception as e:
             print(f"[!] Edge 모델 로드 실패: {e}")
             return None

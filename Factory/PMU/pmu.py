@@ -17,7 +17,7 @@ class PMU:
         self.target_pct = target_pct
         self.stat_proc = None
         self.record_proc = None
-        self.perf_data_file = f"perf_{self.target_pid}.data"
+        self.perf_data_file = "Factory/PMU/Raw_Data/perf_record.data"
 
     def _start_perf_record(self):
         if self.record_proc: return
@@ -75,13 +75,13 @@ class PMU:
                 capture_output=True, text=True
             )
             df_top = self._parse_script(script_result.stdout)
-            os.remove(self.perf_data_file)
+            # os.remove(self.perf_data_file)
         else:
             print(f"[!] Warning: {self.perf_data_file} not found.")
 
         return df_stat, df_top
 
-    def _parse_stat(self, data_str):
+    def _parse_stat(self, data_str): # noqa
         rows = []
         for line in data_str.splitlines():
             if not line.strip() or line.startswith('#'): continue
@@ -118,7 +118,7 @@ class PMU:
                 symbol_raw = " ".join(sym_words)
 
             symbol = re.sub(r'\+0x[0-9a-f]+', '', symbol_raw)
-            symbol = re.sub(r'\s*\(\[.*\]\)', '', symbol).strip()
+            symbol = re.sub(r'\s*\(\[.*\]\)', '', symbol).strip() # noqa
 
             rows.append({
                 'Time_Raw': timestamp,
@@ -129,10 +129,10 @@ class PMU:
         if df.empty: return df
 
         global_summary = df.groupby('Symbol').size().reset_index(name='Count')
-        total_count = global_summary['Count'].sum()
+        total_count = global_summary['Count'].sum() # noqa
 
-        global_summary['Global_Overhead'] = (global_summary['Count'] / total_count * 100).round(2)
-        global_summary = global_summary.sort_values('Global_Overhead', ascending=False)
+        global_summary['Global_Overhead'] = (global_summary['Count'] / total_count * 100).round(2) # noqa
+        global_summary = global_summary.sort_values('Global_Overhead', ascending=False) # noqa
 
         global_summary['Cum_Overhead'] = global_summary['Global_Overhead'].cumsum()
         top_symbols_df = global_summary[

@@ -1,5 +1,6 @@
 from Factory.Machine.Heat_Treatment.heat_treatment_machine import HeatTreatmentMachine
 from Factory.Materials.Heat_Treatment.heat_treatment_materials import HeatTreatmentMaterials
+from Factory.PMU.pmu_contrastive_ensemble import PmuContrastiveEnsemble
 
 
 class HeatTreatmentFactory:
@@ -22,7 +23,10 @@ class HeatTreatmentFactory:
             print("[*] 열처리 공장 구축 및 메모리 적재 완료.\n")
         else:
             self._operate_heat_treatment()
-            pass
+            pce = PmuContrastiveEnsemble(heat_treatment_train_dataset_path=self.__machine.get_train_dataset_path(),
+                                         heat_treatment_test_dataset_path=self.__machine.get_test_dataset_path(),
+                                         pmu_data_dir_path=self.__machine.get_pmu_save_dir_path())
+            pce.prepare_datasets()
 
     def _operate_heat_treatment(self):
         print("\n================ 열처리 공정 시작 ================")

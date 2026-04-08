@@ -22,11 +22,24 @@ class HeatTreatmentFactory:
 
             print("[*] 열처리 공장 구축 및 메모리 적재 완료.\n")
         else:
-            self._operate_heat_treatment()
+            # self._operate_heat_treatment()
             pce = PmuContrastiveEnsemble(heat_treatment_train_dataset_path=self.__machine.get_train_dataset_path(),
                                          heat_treatment_test_dataset_path=self.__machine.get_test_dataset_path(),
                                          pmu_data_dir_path=self.__machine.get_pmu_save_dir_path())
-            pce.prepare_datasets()
+
+            target_columns_dict = {
+                self.__machine.MachineType.DRYING:
+                    self.__machine.get_target_columns(machine_type=self.__machine.MachineType.DRYING),
+                self.__machine.MachineType.HARDENING:
+                    self.__machine.get_target_columns(machine_type=self.__machine.MachineType.HARDENING),
+                self.__machine.MachineType.WASHING:
+                    self.__machine.get_target_columns(machine_type=self.__machine.MachineType.WASHING),
+                self.__machine.MachineType.SALT_BATH:
+                    self.__machine.get_target_columns(machine_type=self.__machine.MachineType.SALT_BATH)
+            }
+
+            pce.prepare_datasets(target_columns_dict)
+            pce.generate_model(target_columns_dict)
 
     def _operate_heat_treatment(self):
         print("\n================ 열처리 공정 시작 ================")

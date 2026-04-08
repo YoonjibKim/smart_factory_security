@@ -91,6 +91,7 @@ class PMU:
                     rows.append({'Time': float(p[0]), 'Event': p[3].strip(), 'Value': float(p[1])})
                 except:
                     continue
+
         if not rows: return pd.DataFrame()
 
         df = pd.DataFrame(rows)

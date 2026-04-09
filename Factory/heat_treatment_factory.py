@@ -38,8 +38,10 @@ class HeatTreatmentFactory:
                     self.__machine.get_target_columns(machine_type=self.__machine.MachineType.SALT_BATH)
             }
 
-            pce.prepare_datasets(target_columns_dict)
-            pce.generate_model(target_columns_dict)
+            # pce.prepare_datasets(target_columns_dict)
+            # pce.generate_model(target_columns_dict)
+            pce.generate_edge_model(target_columns_dict)
+
 
     def _operate_heat_treatment(self):
         print("\n================ 열처리 공정 시작 ================")

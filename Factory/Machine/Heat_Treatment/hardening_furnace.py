@@ -1,11 +1,14 @@
 import os
 import torch
+import threading  # 통신 쓰레드용 추가
 from Factory.PINN.pinn import PINN
+from Network.tcp_server import TCPServer  # 서버 역할 상속용 추가
 
 
-class HardeningFurnace(PINN):
+class HardeningFurnace(PINN, TCPServer):
     def __init__(self, train_pinn_flag, pinn_model_path):
         PINN.__init__(self)
+        TCPServer.__init__(self)  # TCPServer 초기화 추가
 
         self.train_pinn_flag = train_pinn_flag
         self.pinn_model_path = pinn_model_path
@@ -49,11 +52,12 @@ class HardeningFurnace(PINN):
 
         # 무조건 엣지 모델(ONNX)만 로드
         if os.path.exists(edge_model_path):
-            self.__edge_session = self._load_model(edge_model_path) # noqa
+            self.__edge_session = self._load_model(edge_model_path)  # noqa
             if self.__edge_session:
                 print(f"[*] Edge 전용 두뇌(ONNX) 로드 완료: {edge_model_path}")
         else:
-            raise FileNotFoundError(f"[!] 에러: Edge 모델을 찾을 수 없습니다. 빌드(build)를 먼저 수행하여 ONNX 모델을 생성하세요. 경로: {edge_model_path}")
+            raise FileNotFoundError(
+                f"[!] 에러: Edge 모델을 찾을 수 없습니다. 빌드(build)를 먼저 수행하여 ONNX 모델을 생성하세요. 경로: {edge_model_path}")
 
         if test_df is not None:
             print("[*] 원자재(Test 데이터)를 활용하여 Edge 모델 평가를 진행합니다.")
@@ -62,6 +66,29 @@ class HardeningFurnace(PINN):
             self._detect_anomalies(test_df, self.__temp_cols, self.__op_cols)
         else:
             print("[!] 경고: 입력된 원자재 데이터(raw_materials)가 없어 테스트를 건너뜁니다.")
+
+        # ==========================================
+        # [추가] 네트워크 통신 (소입로 -> 컨베이어 벨트)
+        # ==========================================
+        def server_task():
+            # 다음 공정인 컨베이어 벨트가 접속할 수 있도록 서버 오픈
+            self.start_server('127.0.0.1', 8080)
+
+            # 피클(pickle) 기반으로 자동 압축되어 안전하게 전송됨
+            self.send_data(materials)
+            print(f"[HardeningFurnace] 컨베이어 벨트로 데이터 전송 완료")
+
+            # 컨베이어 벨트가 보내는 완료 응답 수신 대기
+            response = self.receive_data()
+            if response:
+                print(f"[HardeningFurnace] 컨베이어 벨트로부터 응답 수신 완료: {response}")
+
+            self.close()
+
+        # 메인 프로그램이 멈추지 않도록 백그라운드 쓰레드로 통신 실행
+        thread = threading.Thread(target=server_task)
+        thread.daemon = True
+        thread.start()
 
         return materials
 
@@ -138,7 +165,7 @@ class HardeningFurnace(PINN):
 
             if os.path.exists(edge_model_path):
                 print(f"[*] Edge 모델 발견! 로드를 시도합니다 -> {edge_model_path}")
-                self.__edge_session = self._load_model(edge_model_path) # noqa
+                self.__edge_session = self._load_model(edge_model_path)  # noqa
                 if self.__edge_session:
                     print("[*] Edge 모델(ONNX) 로드 성공!")
 
@@ -158,7 +185,7 @@ class HardeningFurnace(PINN):
                         f.write(onnx_bytes)
                     print(f"[*] ✅ 자동 변환 및 Edge 모델(ONNX) 저장 완료 -> {edge_model_path}")
 
-                    self.__edge_session = self._load_model(edge_model_path) # noqa
+                    self.__edge_session = self._load_model(edge_model_path)  # noqa
             else:
                 print(f"[!] 에러: 지정된 경로에서 모델을 찾을 수 없습니다.")
 

@@ -42,7 +42,6 @@ class HeatTreatmentFactory:
             # pce.generate_model(target_columns_dict)
             pce.generate_edge_model(target_columns_dict)
 
-
     def _operate_heat_treatment(self):
         print("\n================ 열처리 공정 시작 ================")
 
@@ -60,26 +59,26 @@ class HeatTreatmentFactory:
         hardening_furnace_materials = self.__machine.operate_conveyor_belt(hardening_furnace_materials)
 
         # 4. 솔트조 공정
-        salt_bath_furnace_materials = self.__machine.operate_salt_bath(hardening_furnace_materials)
-        salt_bath_furnace_materials = self.__machine.operate_conveyor_belt(salt_bath_furnace_materials)
+        # salt_bath_furnace_materials = self.__machine.operate_salt_bath(hardening_furnace_materials)
+        # salt_bath_furnace_materials = self.__machine.operate_conveyor_belt(salt_bath_furnace_materials)
 
         # 5. 퀜칭 공정
-        quenching_furnace_materials = self.__machine.operate_quenching(salt_bath_furnace_materials)
-        quenching_furnace_materials = self.__machine.operate_conveyor_belt(quenching_furnace_materials)
-
+        # quenching_furnace_materials = self.__machine.operate_quenching(salt_bath_furnace_materials)
+        # quenching_furnace_materials = self.__machine.operate_conveyor_belt(quenching_furnace_materials)
+        #
         # 6. 세정기 공정
-        washing_furnace_materials = self.__machine.operate_washing(quenching_furnace_materials)
-        washing_furnace_materials = self.__machine.operate_conveyor_belt(washing_furnace_materials)
-
+        # washing_furnace_materials = self.__machine.operate_washing(quenching_furnace_materials)
+        # washing_furnace_materials = self.__machine.operate_conveyor_belt(washing_furnace_materials)
+        #
         # 7. 소려로 공정
-        tempering_furnace_furnace_materials = self.__machine.operate_tempering_furnace(washing_furnace_materials)
-        tempering_furnace_furnace_materials = self.__machine.operate_conveyor_belt(tempering_furnace_furnace_materials)
-
+        # tempering_furnace_furnace_materials = self.__machine.operate_tempering_furnace(washing_furnace_materials)
+        # tempering_furnace_furnace_materials = self.__machine.operate_conveyor_belt(tempering_furnace_furnace_materials)
+        #
         # 8. 방청 공정
-        rust_prevention_furnace_materials = self.__machine.operate_rust_prevention(tempering_furnace_furnace_materials)
-        rust_prevention_furnace_materials = self.__machine.operate_conveyor_belt(rust_prevention_furnace_materials)
-
-        # 8. 부품 가공 완료 및 배출
-        processed_part = self.__materials.unload_hardened_part(rust_prevention_furnace_materials)
-        print(processed_part)
+        # rust_prevention_furnace_materials = self.__machine.operate_rust_prevention(tempering_furnace_furnace_materials)
+        # rust_prevention_furnace_materials = self.__machine.operate_conveyor_belt(rust_prevention_furnace_materials)
+        #
+        # 9. 부품 가공 완료 및 배출
+        # processed_part = self.__materials.unload_hardened_part(rust_prevention_furnace_materials)
+        # print(processed_part)
         print("================ 열처리 공정 종료 ================\n")

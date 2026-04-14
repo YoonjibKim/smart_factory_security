@@ -1,30 +1,29 @@
 import socket
 import pickle
 import struct
-
+import time
 
 class TCPServer:
     def __init__(self):
         self._sock = None
-        self.conn = None
+        self.conn = None  # 기존 공정 코드(if self.conn:) 호환성을 위한 더미 플래그
+        self.clients = [] # [(conn, addr), ...] 다중 클라이언트 소켓 배열
         self._ip = None
         self._port = None
 
     def close(self):
-        if self.conn:
-            try:
-                self.conn.close()
-            except:
-                pass
-            self.conn = None
+        # 연결된 모든 클라이언트 세션 종료
+        for c, addr in self.clients:
+            try: c.close()
+            except: pass
+        self.clients = []
+        self.conn = None
         if self._sock:
-            try:
-                self._sock.close()
-            except:
-                pass
-            self._sock = None
+            try: self._sock.close()
+            except: pass
+        self._sock = None
 
-    def start_server(self, ip, port, timeout=60.0):
+    def start_server(self, ip, port, wait_time=2.0):
         self.close()
         self._ip = ip
         self._port = port
@@ -33,62 +32,65 @@ class TCPServer:
         self._sock.bind((self._ip, self._port))
         self._sock.listen(5)
 
-        self._sock.settimeout(timeout)
-        print(f"[Server] {self._port} 포트에서 연결 대기 중... (최대 {timeout}초 대기)")
+        print(f"[Server] {self._port} 포트 오픈. {wait_time}초 동안 다중 접속(정상+공격) 대기 중...")
 
-        try:
-            self.conn, self.addr = self._sock.accept()
-            self.conn.settimeout(timeout)
-            print(f"[Server] 클라이언트 접속 완료: {self.addr}")
-        except socket.timeout:
-            print(f"[Server] {timeout}초 동안 접속이 없어 대기를 종료합니다.")
-            self.close()
-        except Exception as e:
-            print(f"[Server] 연결 대기 중 에러: {e}")
-            self.close()
+        self._sock.settimeout(0.5) # 0.5초 단위로 끊어서 다수의 접속을 확인
+        start_time = time.time()
+
+        # 주어진 시간(wait_time) 동안 접속하는 모든 클라이언트를 받아들임
+        while time.time() - start_time < wait_time:
+            try:
+                c, addr = self._sock.accept()
+                c.settimeout(5.0)
+                print(f"[Server] 🚨 새로운 클라이언트 접속 포착: {addr}")
+                self.clients.append((c, addr))
+            except socket.timeout:
+                continue
+            except Exception as e:
+                break
+
+        if self.clients:
+            self.conn = True  # 자식 클래스(공정)의 if self.conn: 패스를 위한 플래그
+        else:
+            print(f"[Server] 접속한 클라이언트가 없습니다.")
+
+    def send_data(self, data):
+        if not self.clients: return
+        serialized = pickle.dumps(data)
+        packet = struct.pack('>I', len(serialized)) + serialized
+
+        # 연결된 모든 클라이언트(컨베이어벨트, 해커)에게 데이터 브로드캐스팅
+        for c, addr in self.clients:
+            try:
+                c.sendall(packet)
+                print(f"[Server] -> {addr} 로 데이터 전송 완료")
+            except Exception as e:
+                print(f"[Server] -> {addr} 전송 에러: {e}")
+
+    def receive_data(self):
+        responses = []
+        for c, addr in self.clients:
+            try:
+                raw_msglen = self._recvall(c, 4)
+                if not raw_msglen: continue
+                msglen = struct.unpack('>I', raw_msglen)[0]
+                received_bytes = self._recvall(c, msglen)
+                if received_bytes:
+                    resp = pickle.loads(received_bytes)
+                    responses.append({f"{addr[0]}:{addr[1]}": resp})
+            except Exception as e:
+                pass
+        return responses
 
     def _recvall(self, sock, n):
-        """정해진 바이트 크기(n)만큼 정확히 데이터를 읽어오는 도우미 함수"""
         data = bytearray()
         while len(data) < n:
             try:
                 packet = sock.recv(n - len(data))
-                if not packet:
-                    return None
+                if not packet: return None
                 data.extend(packet)
             except socket.timeout:
-                print("[Server] 데이터 수신 시간 초과!")
                 return None
-            except Exception as e:
-                print(f"[Server] 데이터 수신 에러: {e}")
+            except Exception:
                 return None
         return bytes(data)
-
-    def send_data(self, data):
-        if self.conn:
-            try:
-                # 데이터를 압축된 바이너리로 변환 (아주 빠름)
-                serialized = pickle.dumps(data)
-                # 데이터의 총 길이(4바이트 정수)를 본문 앞에 붙여서 한 번에 전송
-                self.conn.sendall(struct.pack('>I', len(serialized)) + serialized)
-            except Exception as e:
-                print(f"[Server] 전송 에러: {e}")
-
-    def receive_data(self):
-        if self.conn:
-            # 1. 처음 4바이트를 읽어 앞으로 올 본문 데이터의 총 길이를 파악
-            raw_msglen = self._recvall(self.conn, 4)
-            if not raw_msglen:
-                return None
-            msglen = struct.unpack('>I', raw_msglen)[0]
-
-            # 2. 파악한 길이만큼만 정확하게 본문 데이터 수신
-            received_bytes = self._recvall(self.conn, msglen)
-            if received_bytes:
-                try:
-                    # 바이너리를 다시 파이썬 객체(DataFrame 등)로 즉시 복원
-                    return pickle.loads(received_bytes)
-                except Exception as e:
-                    print(f"[Server] 데이터 복원 에러: {e}")
-                    return None
-        return None

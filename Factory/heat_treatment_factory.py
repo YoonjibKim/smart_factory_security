@@ -42,7 +42,6 @@ class HeatTreatmentFactory:
             # pce.generate_model(target_columns_dict)
             pce.generate_edge_model(target_columns_dict)
 
-
     def _operate_heat_treatment(self):
         print("\n================ 열처리 공정 시작 ================")
 

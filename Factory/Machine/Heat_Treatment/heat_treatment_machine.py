@@ -9,13 +9,17 @@ from Factory.Machine.Heat_Treatment.tempering_furnace import TemperingFurnace
 from Factory.Machine.Heat_Treatment.washing import Washing
 from Factory.PMU.pmu import PMU
 from enum import Enum
+from HMI_Interface.hmi_interface import HMIinterface
 import pandas as pd
 import os
 
 
-class HeatTreatmentMachine(PMU):
+class HeatTreatmentMachine(PMU, HMIinterface):
     def __init__(self, preprocess_dataset_flag=False, train_pinn_flag=False):
         PMU.__init__(self)
+        # HMI(Modbus 서버) 통신 초기화 및 서버 자동 시작 (포트 5020)
+        HMIinterface.__init__(self, ip='0.0.0.0', port=5020)
+
         raw_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Raw/품질전처리후데이터.csv"
         quality_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Raw/열처리_품질데이터.xlsx"
         processed_dir_path = "Factory/PINN/Dataset/Heat_Treatment/Processed/"
@@ -127,10 +131,14 @@ class HeatTreatmentMachine(PMU):
         print(f"Train 데이터 크기: {train_df.shape}, Test 데이터 크기: {test_df.shape}")
         print(f"파일 저장 완료: {os.path.abspath(merged_dir_path)} 폴더를 확인하세요.")
 
-    def operate_drying_furnace(self, materials=None):
-        # top_n=5 가 기본값으로 설정되어 있습니다. (PMU(top_n=10) 등으로 변경 가능)
-        pmu = PMU()
+    def _extract_safe_value(self, data):
+        """Pandas 객체와 일반 리스트 모두 안전하게 첫 번째 값을 추출하는 헬퍼 메서드"""
+        if hasattr(data, 'values'):
+            return data.values[0]
+        return data[0]
 
+    def operate_drying_furnace(self, materials=None):
+        pmu = PMU()
         pmu._start_perf_record()
         pmu._start_perf_stat()
 
@@ -140,10 +148,13 @@ class HeatTreatmentMachine(PMU):
 
         print("\n[PERF STAT DATA]")
         print(df_stat)
-
         print("\n[PERF TOP DATA]")
         print(df_top)
         self.__save_pmu_data(df_stat, df_top, 'drying_furnace', self.__pmu_save_dir_path)
+
+        # HMI 전송 (건조로 결과: 120번 주소)
+        safe_val = self._extract_safe_value(result)
+        self.send_message(address=120, message=str(len(safe_val)) + " - OK")
 
         return result
 
@@ -164,6 +175,10 @@ class HeatTreatmentMachine(PMU):
         print(df_top)
         self.__save_pmu_data(df_stat, df_top, 'hardening_furnace', 'Factory/PMU/Data')
 
+        # HMI 전송 (가열로 결과: 130번 주소)
+        safe_val = self._extract_safe_value(result)
+        self.send_message(address=130, message=str(len(safe_val)) + " - OK")
+
         return result
 
     def build_hardening_furnace(self):
@@ -171,6 +186,9 @@ class HeatTreatmentMachine(PMU):
 
     def operate_quenching(self, materials=None):
         result = self.__quenching.operate_quenching(materials)
+        # HMI 전송 (퀜칭 결과: 140번 주소)
+        safe_val = self._extract_safe_value(result)
+        self.send_message(address=140, message=str(len(safe_val)) + " - OK")
         return result
 
     def build_quenching(self):
@@ -178,6 +196,9 @@ class HeatTreatmentMachine(PMU):
 
     def operate_rust_prevention(self, materials=None):
         result = self.__rust_prevention.operate_rust_prevention(materials)
+        # HMI 전송 (방청 결과: 170번 주소)
+        safe_val = self._extract_safe_value(result)
+        self.send_message(address=170, message=str(len(safe_val)) + " - OK")
         return result
 
     def build_rust_prevention(self):
@@ -197,6 +218,10 @@ class HeatTreatmentMachine(PMU):
         print(df_top)
         self.__save_pmu_data(df_stat, df_top, 'salt_bath', 'Factory/PMU/Data')
 
+        # HMI 전송 (솔트배스 결과: 150번 주소)
+        safe_val = self._extract_safe_value(result)
+        self.send_message(address=150, message=str(len(safe_val)) + " - OK")
+
         return result
 
     def build_salt_bath(self):
@@ -204,6 +229,9 @@ class HeatTreatmentMachine(PMU):
 
     def operate_tempering_furnace(self, materials=None):
         result = self.__tempering_furnace.operate_tempering_furnace(materials)
+        # HMI 전송 (템퍼링 결과: 160번 주소)
+        safe_val = self._extract_safe_value(result)
+        self.send_message(address=160, message=str(len(safe_val)) + " - OK")
         return result
 
     def build_tempering_furnace(self):
@@ -223,6 +251,10 @@ class HeatTreatmentMachine(PMU):
         print(df_top)
         self.__save_pmu_data(df_stat, df_top, 'washing', 'Factory/PMU/Data')
 
+        # HMI 전송 (세척 결과: 110번 주소)
+        safe_val = self._extract_safe_value(result)
+        self.send_message(address=110, message=str(len(safe_val)) + " - OK")
+
         return result
 
     def build_washing(self):
@@ -230,6 +262,9 @@ class HeatTreatmentMachine(PMU):
 
     def operate_conveyor_belt(self, materials=None):
         result = self.__conveyor_belt.operate_conveyor_belt(materials)
+        # HMI 전송 (컨베이어벨트 결과: 180번 주소)
+        safe_val = self._extract_safe_value(result)
+        self.send_message(address=180, message=str(len(safe_val)) + " - OK")
         return result
 
     def build_conveyor_belt(self):
@@ -237,6 +272,9 @@ class HeatTreatmentMachine(PMU):
 
     def operate_feeder(self, materials=None):
         result = self.__feeder.operate_feeder(materials)
+        # HMI 전송 (피더 결과: 100번 주소)
+        safe_val = self._extract_safe_value(result)
+        self.send_message(address=100, message=str(len(safe_val)) + " - OK")
         return result
 
     def build_feeder(self):

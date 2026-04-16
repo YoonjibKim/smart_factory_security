@@ -1,16 +1,24 @@
 import os
 import torch
+import pandas as pd
 from Factory.PINN.pinn import PINN
+from Network.tcp_server import TCPServer
 
 
-class Washing(PINN):
+class Washing(PINN, TCPServer):
     def __init__(self, train_pinn_flag, pinn_model_path):
+        # 다중 상속 초기화
         PINN.__init__(self)
+        TCPServer.__init__(self)
 
         self.train_pinn_flag = train_pinn_flag
         self.pinn_model_path = pinn_model_path
 
         self.washing_alpha = 0.01
+
+        # 네트워크 설정 (솔트조와 포트 충돌을 방지하기 위해 5001 사용)
+        self.server_ip = '127.0.0.1'  # 외부 통신 시 '0.0.0.0'
+        self.server_port = 8080
 
         self.__target_columns = [
             'TAG_MIN',
@@ -21,13 +29,21 @@ class Washing(PINN):
             '세정기'
         ]
 
+        # 부모 클래스(PINN)의 IndexError를 막기 위한 Dummy 컬럼 유지
         self.__op_cols = ['세정_Dummy_OP_1']
 
     def get_target_columns(self):
         return self.__target_columns
 
     def operate_washing(self, materials=None):  # noqa
-        print("세정기 동작 및 추론(테스트) 수행 (Edge 모델 전용)")
+        print("\n[Washing] 세정기 동작 및 추론(테스트) 수행 (Edge 모델 전용)")
+
+        # [안전한 배제 로직] 이전 공정에서 넘어온 데이터에 세정기 OP가 없더라도 0.0으로 마스킹
+        # 가중치에 0이 곱해지므로 실제 물리 연산에 영향을 주지 않으면서 에러를 우회합니다.
+        if isinstance(materials, pd.DataFrame):
+            for col in self.__op_cols:
+                materials[col] = 0.0
+
         _, test_df = self._filter_features(test_df=materials)
 
         edge_model_dir = "Factory/Machine/Heat_Treatment/PINN/Edge_Model"
@@ -48,6 +64,23 @@ class Washing(PINN):
             self._detect_anomalies(test_df, self.__temp_cols, self.__op_cols)
         else:
             print("[!] 경고: 입력된 원자재 데이터(raw_materials)가 없어 테스트를 건너뜁니다.")
+
+        # [네트워크 - 서버 대기 로직]
+        print(f"[*] 세정 가공 완료. 컨베이어벨트(Client)의 수거를 대기합니다... (서버 오픈: {self.server_ip}:{self.server_port})")
+        try:
+            self.start_server(self.server_ip, self.server_port)
+
+            if self.conn:
+                data_to_send = materials.to_json() if isinstance(materials, pd.DataFrame) else str(materials)
+                self.send_data(data_to_send)
+
+                response = self.receive_data()
+                print(f"[*] 컨베이어벨트 응답: {response}")
+
+        except Exception as e:
+            print(f"[!] 세정기 통신 에러 발생: {e}")
+        finally:
+            self.close()
 
         return materials
 

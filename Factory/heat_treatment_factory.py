@@ -78,7 +78,7 @@ class HeatTreatmentFactory:
         rust_prevention_furnace_materials = self.__machine.operate_rust_prevention(tempering_furnace_furnace_materials)
         rust_prevention_furnace_materials = self.__machine.operate_conveyor_belt(rust_prevention_furnace_materials)
 
-        # 8. 부품 가공 완료 및 배출
+        # 9. 부품 가공 완료 및 배출
         processed_part = self.__materials.unload_hardened_part(rust_prevention_furnace_materials)
         print(processed_part)
         print("================ 열처리 공정 종료 ================\n")

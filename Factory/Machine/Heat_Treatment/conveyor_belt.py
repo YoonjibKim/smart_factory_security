@@ -7,38 +7,45 @@ class ConveyorBelt(TCPClient):
     def __init__(self):
         TCPClient.__init__(self)
 
-    def operate_conveyor_belt(self, materials=None):  # noqa
-        print("컨베이어벨트 동작: 서버에 접속 시도")
-
-        # 서버가 열릴 시간을 아주 잠깐 벌어줌
-        time.sleep(0.5)
-
+    def operate_conveyor_belt(self, materials=None, target_port=8080):
+        print(f"컨베이어벨트 동작: 서버(포트:{target_port})에 접속 시도")
         received_materials = materials
 
-        if self.connect_server('127.0.0.1', 8080):
-            # 통신 부모 클래스가 압축을 풀어서 원본 DataFrame 객체로 돌려줌
-            data = self.receive_data()
+        connected = False
+        # 최대 10번(5초간) 재시도하여 Connection Refused 방지
+        for i in range(10):
+            time.sleep(0.5)
+            if self.connect_server('127.0.0.1', target_port):
+                connected = True
+                break
+            print(f"   -> 서버가 열리길 기다리는 중... ({i + 1}/10)")
 
+        if connected:
+            data = self.receive_data()
             if data is not None:
                 received_materials = data
-
                 if isinstance(received_materials, pd.DataFrame):
                     print(f"[ConveyorBelt] DataFrame 수신 완료! 크기: {received_materials.shape}")
                 else:
                     print(f"[ConveyorBelt] 일반 데이터 수신 완료")
 
-                time.sleep(1)  # 가상의 컨베이어 벨트 이송 시간
+                time.sleep(1)
 
                 # 피더로 작업 완료 상태 데이터 전송
                 reply_message = {"status": "success", "message": "수신 및 이송 완료"}
                 self.send_data(reply_message)
                 print("[ConveyorBelt] 피더로 응답 전송 완료")
 
-            self.close()
+            # 🌟 핵심 수정: 부모의 close() 함수를 찾지 못하는 에러를 방지하기 위해
+            # 소켓 연결(conn)이 살아있다면 직접 통신을 종료하도록 변경했습니다.
+            if self.conn:
+                self.conn.close()
+                self.conn = None
+
         else:
-            print("[ConveyorBelt] 서버 연결 실패로 기존 인자값을 사용합니다.")
+            print("[ConveyorBelt] 서버 연결 최종 실패. 기존 데이터를 그대로 반환합니다.")
 
         return received_materials
 
-    def build_conveyor_belt(self):  # noqa
+    def build_conveyor_belt(self):
         print("컨베이어벨트 생성")

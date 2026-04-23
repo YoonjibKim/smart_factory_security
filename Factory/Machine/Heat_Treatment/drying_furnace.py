@@ -14,6 +14,7 @@ class DryingFurnace(PINN, TCPServer):
         self.pinn_model_path = pinn_model_path
         self.alpha = 0.01
 
+        # 건조로 타겟 컬럼 설정
         self.__target_columns = [
             'TAG_MIN', '소입1존 OP', '소입2존 OP', '소입3존 OP', '소입4존 OP',
             '소입로 온도 1 Zone', '소입로 온도 2 Zone', '소입로 온도 3 Zone', '소입로 온도 4 Zone'
@@ -36,6 +37,7 @@ class DryingFurnace(PINN, TCPServer):
         edge_model_dir = "Factory/Machine/Heat_Treatment/PINN/Edge_Model"
         edge_model_path = os.path.join(edge_model_dir, "drying_furnace_hailo.onnx")
 
+        # 엣지 모델 로드
         if os.path.exists(edge_model_path):
             self.__edge_session = self._load_model(edge_model_path)
             if self.__edge_session:
@@ -43,25 +45,37 @@ class DryingFurnace(PINN, TCPServer):
         else:
             print(f"[!] 경고: Edge 모델을 찾을 수 없습니다.")
 
+        # PINN 추론 수행
         if test_df is not None:
             try:
                 self._test_pinn(test_df, self.__temp_cols, self.__op_cols)
                 self._simulate_what_if_op(test_df, self.__temp_cols, self.__op_cols, self.__op_cols[0])
                 self._detect_anomalies(test_df, self.__temp_cols, self.__op_cols)
             except Exception as e:
-                print(f"[!] PINN 추론 중 에러 발생 (건너뜀): {e}")
+                print(f"[!] PINN 추론 중 에러 발생 (건너뜜): {e}")
 
-        # 통신 로직 추가: 처리 완료된 materials를 컨베이어 벨트로 전송
+        # ==========================================
+        # 네트워크 통신 (건조로 -> 컨베이어 벨트)
+        # ==========================================
         def server_task():
-            self.start_server('127.0.0.1', 8080)
-            self.send_data(materials)
-            print(f"[DryingFurnace] 컨베이어 벨트로 데이터 전송 완료")
+            # 🌟 핵심 수정: 건조로는 8081 포트를 사용하며, 연결 성공 시에만 데이터를 보냅니다.
+            # start_server가 True를 반환할 때까지(접속 시까지) 대기합니다.
+            if self.start_server('127.0.0.1', 8081, timeout=30.0):
+                # 클라이언트(컨베이어벨트)가 접속했을 때만 실행
+                self.send_data(materials)
+                print(f"[DryingFurnace] 컨베이어 벨트로 데이터 전송 완료")
 
-            response = self.receive_data()
-            if response:
-                print(f"[DryingFurnace] 컨베이어 벨트로부터 응답 수신 완료: {response}")
+                # 응답 확인
+                response = self.receive_data()
+                if response:
+                    print(f"[DryingFurnace] 컨베이어 벨트로부터 응답 수신 완료: {response}")
+            else:
+                # 아무도 접속하지 않은 경우 에러 없이 로그만 출력
+                print("[!] DryingFurnace: 컨베이어 벨트 접속 타임아웃.")
+
             self.close()
 
+        # 통신 로직을 백그라운드 쓰레드에서 실행
         thread = threading.Thread(target=server_task)
         thread.daemon = True
         thread.start()
@@ -88,11 +102,8 @@ class DryingFurnace(PINN, TCPServer):
 
         self._make_model()
 
-        if self.pinn_model_path.endswith('/') or self.pinn_model_path.endswith('\\') or os.path.isdir(
-                self.pinn_model_path):
-            actual_model_path = os.path.join(self.pinn_model_path, "drying_furnace_pinn.pth")
-        else:
-            actual_model_path = self.pinn_model_path
+        actual_model_path = os.path.join(self.pinn_model_path, "drying_furnace_pinn.pth") if os.path.isdir(
+            self.pinn_model_path) else self.pinn_model_path
 
         if self.train_pinn_flag:
             print(f"[*] 학습 모드 작동: 건조로 모델 학습을 시작합니다.")

@@ -260,8 +260,9 @@ class HeatTreatmentMachine(PMU, HMIinterface):
     def build_washing(self):
         self.__washing.build_washing(self.__train_dataset_path, self.__test_dataset_path)
 
-    def operate_conveyor_belt(self, materials=None):
-        result = self.__conveyor_belt.operate_conveyor_belt(materials)
+    # 🌟 [수정된 부분] port 파라미터가 추가되었습니다.
+    def operate_conveyor_belt(self, materials=None, port=8080):
+        result = self.__conveyor_belt.operate_conveyor_belt(materials, target_port=port)
         # HMI 전송 (컨베이어벨트 결과: 180번 주소)
         safe_val = self._extract_safe_value(result)
         self.send_message(address=180, message=str(len(safe_val)) + " - OK")

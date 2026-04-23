@@ -71,17 +71,18 @@ class HardeningFurnace(PINN, TCPServer):
         # [추가] 네트워크 통신 (소입로 -> 컨베이어 벨트)
         # ==========================================
         def server_task():
-            # 다음 공정인 컨베이어 벨트가 접속할 수 있도록 서버 오픈
-            self.start_server('127.0.0.1', 8080)
+            # 🌟 핵심 수정: 가열로는 포트 8082를 사용하며, 안전장치(if)를 걸어줍니다.
+            if self.start_server('127.0.0.1', 8082, timeout=30.0):
+                # 피클(pickle) 기반으로 자동 압축되어 안전하게 전송됨
+                self.send_data(materials)
+                print(f"[HardeningFurnace] 컨베이어 벨트로 데이터 전송 완료")
 
-            # 피클(pickle) 기반으로 자동 압축되어 안전하게 전송됨
-            self.send_data(materials)
-            print(f"[HardeningFurnace] 컨베이어 벨트로 데이터 전송 완료")
-
-            # 컨베이어 벨트가 보내는 완료 응답 수신 대기
-            response = self.receive_data()
-            if response:
-                print(f"[HardeningFurnace] 컨베이어 벨트로부터 응답 수신 완료: {response}")
+                # 컨베이어 벨트가 보내는 완료 응답 수신 대기
+                response = self.receive_data()
+                if response:
+                    print(f"[HardeningFurnace] 컨베이어 벨트로부터 응답 수신 완료: {response}")
+            else:
+                print("[!] HardeningFurnace: 컨베이어 벨트 접속 대기 타임아웃.")
 
             self.close()
 

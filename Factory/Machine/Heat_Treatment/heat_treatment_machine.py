@@ -9,153 +9,120 @@ from Factory.Machine.Heat_Treatment.tempering_furnace import TemperingFurnace
 from Factory.Machine.Heat_Treatment.washing import Washing
 from Factory.PMU.pmu import PMU
 from enum import Enum
-from HMI_Interface.hmi_interface import HMIinterface
+from pyModbusTCP.server import ModbusServer, DataBank
 import pandas as pd
 import os
 
 
-class HeatTreatmentMachine(PMU, HMIinterface):
+class HeatTreatmentMachine(PMU):
+    class MachineType(Enum):
+        DRYING = 1
+        HARDENING = 2
+        SALT_BATH = 3
+        WASHING = 4
+
     def __init__(self, preprocess_dataset_flag=False, train_pinn_flag=False):
         PMU.__init__(self)
-        # HMI(Modbus 서버) 통신 초기화 및 서버 자동 시작 (포트 5020)
-        HMIinterface.__init__(self, ip='0.0.0.0', port=5020)
+
+        # 🌟 클라이언트 연결이 아닌 Modbus 서버 직접 구동
+        self.server = ModbusServer(host='0.0.0.0', port=5020, no_block=True)
+        try:
+            self.server.start()
+            print("[5020] 포트에서 Modbus TCP 서버 구동 완료...")
+        except Exception as e:
+            print(f"[!] Modbus 서버 시작 실패: {e}")
 
         raw_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Raw/품질전처리후데이터.csv"
         quality_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Raw/열처리_품질데이터.xlsx"
-        processed_dir_path = "Factory/PINN/Dataset/Heat_Treatment/Processed/"
-        pinn_model_path = "Factory/Machine/Heat_Treatment/PINN/"
+        self.__train_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Train/train_dataset.csv"
+        self.__test_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Test/test_dataset.csv"
 
-        self.__drying_furnace = DryingFurnace(train_pinn_flag, pinn_model_path)
-        self.__hardening_furnace = HardeningFurnace(train_pinn_flag, pinn_model_path)
-        self.__quenching = Quenching()
-        self.__rust_prevention = RustPrevention()
-        self.__salt_bath = SaltBath(train_pinn_flag, pinn_model_path)
-        self.__tempering_furnace = TemperingFurnace()
-        self.__washing = Washing(train_pinn_flag, pinn_model_path)
-        self.__conveyor_belt = ConveyorBelt()
         self.__feeder = Feeder()
+        self.__conveyor_belt = ConveyorBelt()
+        self.__drying_furnace = DryingFurnace(train_pinn_flag,
+                                              "Factory/Machine/Heat_Treatment/PINN/Model/drying_furnace_model.pth")
+        self.__hardening_furnace = HardeningFurnace(train_pinn_flag,
+                                                    "Factory/Machine/Heat_Treatment/PINN/Model/hardening_furnace_model.pth")
+        self.__salt_bath = SaltBath(train_pinn_flag, "Factory/Machine/Heat_Treatment/PINN/Model/salt_bath_model.pth")
+        self.__quenching = Quenching()
+        self.__washing = Washing(train_pinn_flag, "Factory/Machine/Heat_Treatment/PINN/Model/washing_model.pth")
+        self.__tempering_furnace = TemperingFurnace()
+        self.__rust_prevention = RustPrevention()
 
         if preprocess_dataset_flag:
-            self.__preprocess_heat_treatment_dataset(raw_dataset_path, quality_dataset_path, processed_dir_path)
+            self.__preprocess_data(raw_dataset_path, quality_dataset_path)
 
-        self.__train_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Processed/train_data.csv"
-        self.__test_dataset_path = "Factory/PINN/Dataset/Heat_Treatment/Processed/test_data.csv"
-
-        self.__pmu_save_dir_path = "Factory/PMU/Data"
-
-    class MachineType(Enum):
-        DRYING = "drying_furnace"
-        HARDENING = "hardening_furnace"
-        SALT_BATH = "salt_bath"
-        WASHING = "washing"
-
-    def get_pmu_save_dir_path(self):
-        return self.__pmu_save_dir_path
-
-    def get_target_columns(self, machine_type: MachineType):
-        if machine_type == self.MachineType.DRYING:
-            return self.__drying_furnace.get_target_columns()
-        elif machine_type == self.MachineType.HARDENING:
-            return self.__hardening_furnace.get_target_columns()
-        elif machine_type == self.MachineType.SALT_BATH:
-            return self.__salt_bath.get_target_columns()
-        elif machine_type == self.MachineType.WASHING:
-            return self.__washing.get_target_columns()
+    # ----------------------------------------------------
+    # 🌟 Modbus 서버 메모리 읽기/쓰기/지우기 기능 지원
+    # ----------------------------------------------------
+    def set_server_state(self, address, value):
+        if hasattr(self.server, 'data_bank'):
+            self.server.data_bank.set_holding_registers(address, [value])
         else:
-            return None
+            DataBank.set_words(address, [value])
 
-    def get_train_dataset_path(self):
-        return self.__train_dataset_path
+    def get_server_state(self, address, count=30):
+        if hasattr(self.server, 'data_bank'):
+            res = self.server.data_bank.get_holding_registers(address, count)
+            return res if res else [0] * count
+        else:
+            res = DataBank.get_words(address, count)
+            return res if res else [0] * count
 
-    def get_test_dataset_path(self):
-        return self.__test_dataset_path
+    def clear_server_state(self, address, count=30):
+        if hasattr(self.server, 'data_bank'):
+            self.server.data_bank.set_holding_registers(address, [0] * count)
+        else:
+            DataBank.set_words(address, [0] * count)
 
-    def __save_pmu_data(self, df_stat, df_top, type, base_dir): # noqa
-        """
-        df_stat와 df_top 데이터프레임을 type에 따라 구분하여 지정된 경로에 CSV로 저장합니다.
-        """
-        if not os.path.exists(base_dir):
-            os.makedirs(base_dir)
-            print(f"Directory created: {base_dir}")
-
-        stat_path = os.path.join(base_dir, f"perf_stat_{type}.csv")
-        top_path = os.path.join(base_dir, f"perf_top_{type}.csv")
-
-        try:
-            df_stat.to_csv(stat_path, index=False, encoding='utf-8-sig')
-            df_top.to_csv(top_path, index=False, encoding='utf-8-sig')
-
-            print(f"Successfully saved ({type}):")
-            print(f" - {stat_path}")
-            print(f" - {top_path}")
-
-        except Exception as e:
-            print(f"Error saving data ({type}): {e}")
-
-    def __preprocess_heat_treatment_dataset(self, raw_dataset_path, quality_dataset_path, merged_dir_path):  # noqa
-        print(f"원본 데이터셋 로드: {raw_dataset_path}")
-
-        raw_dataset_df = pd.read_csv(raw_dataset_path, encoding="cp949", engine="python") # noqa
-
-        print(f"품질 데이터셋 로드: {quality_dataset_path}")
-        quality_dataset_df = pd.read_excel(quality_dataset_path)
-
-        raw_dataset_df['배정번호'] = raw_dataset_df['배정번호'].astype(str) # noqa
-        quality_dataset_df['배정번호'] = quality_dataset_df['배정번호'].astype(str)
-
-        target_columns = ['배정번호', '작업일', '양품수량', '불량수량', '총수량']
-        quality_subset = quality_dataset_df[target_columns]
-
-        df_merged = pd.merge(raw_dataset_df, quality_subset, on='배정번호', how='left') # noqa
-        df_merged['불량률'] = (df_merged['불량수량'] / df_merged['총수량']).fillna(0)
-
-        os.makedirs(merged_dir_path, exist_ok=True)
-
-        merged_dataset_path = os.path.join(merged_dir_path, 'merged_data.csv')
-        df_merged.to_csv(merged_dataset_path, index=False, encoding="cp949")
-        print(f"병합 및 불량률 추가 완료. 파일 저장됨: {merged_dataset_path}")
-
-        unique_batches = df_merged['배정번호'].dropna().unique()
-
-        split_idx = int(len(unique_batches) * 0.8)
-        train_batches = unique_batches[:split_idx]
-        test_batches = unique_batches[split_idx:]
-
-        train_df = df_merged[df_merged['배정번호'].isin(train_batches)].reset_index(drop=True)
-        test_df = df_merged[df_merged['배정번호'].isin(test_batches)].reset_index(drop=True)
-
-        train_df.to_csv(os.path.join(merged_dir_path, 'train_data.csv'), index=False, encoding='cp949')
-        test_df.to_csv(os.path.join(merged_dir_path, 'test_data.csv'), index=False, encoding='cp949')
-
-        print(f"[데이터 분할 완료] Train 배차 수: {len(train_batches)}개, Test 배차 수: {len(test_batches)}개")
-        print(f"Train 데이터 크기: {train_df.shape}, Test 데이터 크기: {test_df.shape}")
-        print(f"파일 저장 완료: {os.path.abspath(merged_dir_path)} 폴더를 확인하세요.")
+    def send_message(self, address, message):
+        if isinstance(message, str):
+            encoded_bytes = message.encode('utf-8')
+            if len(encoded_bytes) % 2 != 0: encoded_bytes += b'\x00'
+            values = [(encoded_bytes[i] << 8) | encoded_bytes[i + 1] for i in range(0, len(encoded_bytes), 2)]
+            if hasattr(self.server, 'data_bank'):
+                self.server.data_bank.set_holding_registers(address, values)
+            else:
+                DataBank.set_words(address, values)
+        else:
+            val = [message] if isinstance(message, int) else message
+            if hasattr(self.server, 'data_bank'):
+                self.server.data_bank.set_holding_registers(address, val)
+            else:
+                DataBank.set_words(address, val)
 
     def _extract_safe_value(self, data):
-        """Pandas 객체와 일반 리스트 모두 안전하게 첫 번째 값을 추출하는 헬퍼 메서드"""
-        if hasattr(data, 'values'):
-            return data.values[0]
-        return data[0]
+        if isinstance(data, pd.DataFrame):
+            return data.head(1).values.tolist()[0]
+        elif isinstance(data, list):
+            return data[:1]
+        return [0]
+
+    def __preprocess_data(self, raw_path, quality_path):
+        pass
+
+    def __save_pmu_data(self, df_stat, df_top, process_name, save_path):
+        os.makedirs(save_path, exist_ok=True)
+        if df_stat is not None:
+            df_stat.to_csv(os.path.join(save_path, f'perf_stat_{process_name}.csv'), index=False)
+        if df_top is not None:
+            df_top.to_csv(os.path.join(save_path, f'perf_top_{process_name}.csv'), index=False)
+
+    # ----------------------------------------------------
+    # 🌟 복구된 기계 가동 함수들 (operate_xxxx)
+    # ----------------------------------------------------
+    def operate_feeder(self, materials=None):
+        return self.__feeder.operate_feeder(materials)
 
     def operate_drying_furnace(self, materials=None):
         pmu = PMU()
         pmu._start_perf_record()
         pmu._start_perf_stat()
-
         result = self.__drying_furnace.operate_drying_furnace(materials)
-
         df_stat, df_top = pmu.stop_and_collect()
-
-        print("\n[PERF STAT DATA]")
-        print(df_stat)
-        print("\n[PERF TOP DATA]")
-        print(df_top)
-        self.__save_pmu_data(df_stat, df_top, 'drying_furnace', self.__pmu_save_dir_path)
-
-        # HMI 전송 (건조로 결과: 120번 주소)
+        self.__save_pmu_data(df_stat, df_top, 'drying_furnace', 'Factory/PMU/Data')
         safe_val = self._extract_safe_value(result)
         self.send_message(address=120, message=str(len(safe_val)) + " - OK")
-
         return result
 
     def build_drying_furnace(self):
@@ -165,118 +132,64 @@ class HeatTreatmentMachine(PMU, HMIinterface):
         pmu = PMU()
         pmu._start_perf_record()
         pmu._start_perf_stat()
-
         result = self.__hardening_furnace.operate_hardening_furnace(materials)
-
         df_stat, df_top = pmu.stop_and_collect()
-        print("\n[PERF STAT DATA]")
-        print(df_stat)
-        print("\n[PERF TOP DATA]")
-        print(df_top)
         self.__save_pmu_data(df_stat, df_top, 'hardening_furnace', 'Factory/PMU/Data')
-
-        # HMI 전송 (가열로 결과: 130번 주소)
         safe_val = self._extract_safe_value(result)
         self.send_message(address=130, message=str(len(safe_val)) + " - OK")
-
         return result
 
     def build_hardening_furnace(self):
         self.__hardening_furnace.build_hardening_furnace(self.__train_dataset_path, self.__test_dataset_path)
 
-    def operate_quenching(self, materials=None):
-        result = self.__quenching.operate_quenching(materials)
-        # HMI 전송 (퀜칭 결과: 140번 주소)
-        safe_val = self._extract_safe_value(result)
-        self.send_message(address=140, message=str(len(safe_val)) + " - OK")
-        return result
-
-    def build_quenching(self):
-        self.__quenching.build_quenching()
-
-    def operate_rust_prevention(self, materials=None):
-        result = self.__rust_prevention.operate_rust_prevention(materials)
-        # HMI 전송 (방청 결과: 170번 주소)
-        safe_val = self._extract_safe_value(result)
-        self.send_message(address=170, message=str(len(safe_val)) + " - OK")
-        return result
-
-    def build_rust_prevention(self):
-        self.__rust_prevention.build_rust_prevention()
-
     def operate_salt_bath(self, materials=None):
         pmu = PMU()
         pmu._start_perf_record()
         pmu._start_perf_stat()
-
         result = self.__salt_bath.operate_salt_bath(materials)
-
         df_stat, df_top = pmu.stop_and_collect()
-        print("\n[PERF STAT DATA]")
-        print(df_stat)
-        print("\n[PERF TOP DATA]")
-        print(df_top)
         self.__save_pmu_data(df_stat, df_top, 'salt_bath', 'Factory/PMU/Data')
-
-        # HMI 전송 (솔트배스 결과: 150번 주소)
         safe_val = self._extract_safe_value(result)
         self.send_message(address=150, message=str(len(safe_val)) + " - OK")
-
         return result
 
     def build_salt_bath(self):
         self.__salt_bath.build_salt_bath(self.__train_dataset_path, self.__test_dataset_path)
 
-    def operate_tempering_furnace(self, materials=None):
-        result = self.__tempering_furnace.operate_tempering_furnace(materials)
-        # HMI 전송 (템퍼링 결과: 160번 주소)
+    def operate_quenching(self, materials=None):
+        result = self.__quenching.operate_quenching(materials)
         safe_val = self._extract_safe_value(result)
-        self.send_message(address=160, message=str(len(safe_val)) + " - OK")
+        self.send_message(address=140, message=str(len(safe_val)) + " - OK")
         return result
-
-    def build_tempering_furnace(self):
-        self.__tempering_furnace.build_tempering_furnace()
 
     def operate_washing(self, materials=None):
         pmu = PMU()
         pmu._start_perf_record()
         pmu._start_perf_stat()
-
         result = self.__washing.operate_washing(materials)
-
         df_stat, df_top = pmu.stop_and_collect()
-        print("\n[PERF STAT DATA]")
-        print(df_stat)
-        print("\n[PERF TOP DATA]")
-        print(df_top)
         self.__save_pmu_data(df_stat, df_top, 'washing', 'Factory/PMU/Data')
-
-        # HMI 전송 (세척 결과: 110번 주소)
         safe_val = self._extract_safe_value(result)
         self.send_message(address=110, message=str(len(safe_val)) + " - OK")
-
         return result
 
     def build_washing(self):
         self.__washing.build_washing(self.__train_dataset_path, self.__test_dataset_path)
 
-    # 🌟 [수정된 부분] port 파라미터가 추가되었습니다.
     def operate_conveyor_belt(self, materials=None, port=8080):
         result = self.__conveyor_belt.operate_conveyor_belt(materials, target_port=port)
-        # HMI 전송 (컨베이어벨트 결과: 180번 주소)
         safe_val = self._extract_safe_value(result)
         self.send_message(address=180, message=str(len(safe_val)) + " - OK")
         return result
 
-    def build_conveyor_belt(self):
-        self.__conveyor_belt.build_conveyor_belt()
-
-    def operate_feeder(self, materials=None):
-        result = self.__feeder.operate_feeder(materials)
-        # HMI 전송 (피더 결과: 100번 주소)
+    def operate_tempering_furnace(self, materials=None):
+        result = self.__tempering_furnace.operate_tempering_furnace(materials)
         safe_val = self._extract_safe_value(result)
-        self.send_message(address=100, message=str(len(safe_val)) + " - OK")
+        self.send_message(address=160, message=str(len(safe_val)) + " - OK")
         return result
 
-    def build_feeder(self):
-        self.__feeder.build_feeder()
+    def operate_rust_prevention(self, materials=None):
+        result = self.__rust_prevention.operate_rust_prevention(materials)
+        safe_val = self._extract_safe_value(result)
+        self.send_message(address=170, message=str(len(safe_val)) + " - OK")
+        return result
